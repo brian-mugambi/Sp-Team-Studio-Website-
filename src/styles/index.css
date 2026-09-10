@@ -30,6 +30,10 @@ html {
   scroll-behavior: smooth;
 }
 
+html, body {
+  min-height: 100%;
+}
+
 body {
   font-family: 'Courier New', 'Fira Code', monospace;
   background: var(--bg);
@@ -38,6 +42,7 @@ body {
   min-height: 100vh;
   position: relative;
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -155,7 +160,7 @@ img { max-width: 100%; display: block; }
 .boot-bar { height: 2px; background: var(--faintest); margin-top: 16px; overflow: hidden; }
 .boot-bar-fill { height: 100%; background: linear-gradient(90deg, var(--violet), var(--cyan)); transition: width 0.3s ease; }
 
-body.booting { overflow: hidden; }
+/* Do not lock page scrolling during the boot overlay. */
 
 /* ===== HEADER ===== */
 .spts-header {
