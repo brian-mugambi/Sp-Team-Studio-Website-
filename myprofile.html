@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyProfile · mockup</title>
+    <!-- short & clean profile mockup, minimal styling -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #eef2f7;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1.5rem;
+        }
+
+        /* profile card – soft, modern mockup */
+        .profile-card {
+            background: white;
+            max-width: 460px;
+            width: 100%;
+            border-radius: 36px;
+            box-shadow: 0 20px 35px -8px rgba(0, 10, 30, 0.15), 0 5px 12px rgba(0, 0, 0, 0.05);
+            padding: 2rem 1.8rem 1.8rem;
+            transition: transform 0.2s ease;
+            text-align: center;
+        }
+
+        .profile-card:hover {
+            transform: scale(1.01);
+        }
+
+        /* avatar — pure mockup, no external images */
+        .avatar {
+            width: 110px;
+            height: 110px;
+            background: linear-gradient(135deg, #4070f4, #7b9cff);
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 16px -4px rgba(64, 112, 244, 0.3);
+            border: 3px solid white;
+            outline: 2px solid rgba(64, 112, 244, 0.2);
+        }
+
+        .avatar span {
+            font-size: 3.2rem;
+            font-weight: 500;
+            color: white;
+            letter-spacing: 1px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        /* basic typography */
+        h1 {
+            font-size: 1.85rem;
+            font-weight: 600;
+            color: #0b1b33;
+            letter-spacing: -0.3px;
+            margin-bottom: 0.25rem;
+        }
+
+        .handle {
+            font-size: 1rem;
+            color: #4f6f9f;
+            font-weight: 400;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .handle::before {
+            content: "@";
+            font-weight: 500;
+            opacity: 0.8;
+        }
+
+        .bio {
+            font-size: 0.95rem;
+            color: #2b3f5e;
+            line-height: 1.5;
+            background: #f2f6fe;
+            padding: 0.9rem 1rem;
+            border-radius: 40px;
+            margin: 1.2rem 0 1.5rem;
+            display: inline-block;
+            font-weight: 400;
+            border: 1px solid rgba(64, 112, 244, 0.15);
+        }
+
+        /* stats row – mockup only */
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            gap: 0.5rem;
+            background: #f8faff;
+            padding: 1rem 0.5rem;
+            border-radius: 60px;
+            margin-bottom: 1.8rem;
+            border: 1px solid #e6edfc;
+        }
+
+        .stat-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-number {
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: #0b1b33;
+            line-height: 1.2;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: #5070a0;
+            font-weight: 500;
+        }
+
+        /* buttons – mockup CTA */
+        .actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            border: none;
+            background: #ffffff;
+            padding: 0.7rem 1.6rem;
+            border-radius: 40px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: default;   /* mockup, no real interaction */
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+            transition: all 0.15s ease;
+            border: 1px solid #d9e4f5;
+            color: #1b3358;
+            flex: 1 1 auto;
+            min-width: 120px;
+        }
+
+        .btn-primary {
+            background: #4070f4;
+            border: 1px solid #4070f4;
+            color: white;
+            box-shadow: 0 6px 12px -6px rgba(64, 112, 244, 0.4);
+        }
+
+        .btn-primary:hover {
+            background: #2e5ad0;
+            cursor: default;  /* still mockup */
+        }
+
+        .btn:hover {
+            background: #f5f9ff;
+            border-color: #b7cef0;
+        }
+
+        .btn-primary:hover {
+            background: #2e5ad0;
+            border-color: #2e5ad0;
+        }
+
+        /* tiny watermark – just for mockup feel */
+        .mock-note {
+            margin-top: 1.8rem;
+            font-size: 0.6rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #a0b4d0;
+            border-top: 1px dashed #d0ddeb;
+            padding-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- profile card – mockup resemblance -->
+    <div class="profile-card">
+        <!-- avatar (mockup, no real image) -->
+        <div class="avatar">
+            <span>👤</span>
+        </div>
+
+        <!-- identity -->
+        <h1>Alex Morgan</h1>
+        <div class="handle">alexmorgan</div>
+
+        <!-- short bio -->
+        <div class="bio">
+            ✦ product designer &amp; coffee fan ✦
+        </div>
+
+        <!-- stats row (mockup numbers) -->
+        <div class="stats">
+            <div class="stat-item">
+                <span class="stat-number">128</span>
+                <span class="stat-label">posts</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">8.4k</span>
+                <span class="stat-label">followers</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">342</span>
+                <span class="stat-label">following</span>
+            </div>
+        </div>
+
+        <!-- mockup action buttons -->
+        <div class="actions">
+            <button class="btn btn-primary">Follow</button>
+            <button class="btn">Message</button>
+        </div>
+
+        <!-- subtle mockup note, just for style -->
+        <div class="mock-note">profile mockup · myprofile.html</div>
+    </div>
+</body>
+</html>
