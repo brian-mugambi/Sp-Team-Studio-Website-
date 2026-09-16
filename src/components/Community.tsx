@@ -2,7 +2,7 @@ import { SectionPrompt } from './SectionPrompt';
 import { SectionHeading } from './SectionHeading';
 import { Reveal } from './Reveal';
 
-const WHATSAPP_URL = 'https://chat.whatsapp.com/FY9i0Gn1fNQ070eFUS2DFN?s=cl&p=a&mlu=4&ilr=4';
+const WHATSAPP_URL = 'https://chat.whatsapp.com/CZoP0RCjCEGEfJUDTARAvU?s=cl&p=a&mlu=4&ilr=4';
 
 export function Community() {
   return (
