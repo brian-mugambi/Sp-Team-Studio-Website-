@@ -612,17 +612,16 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   catch(x:any){toast("error",x.message||"Unable to delete post");}
   finally{setPendingDeleteId(null);}
  }
-
  if(notFound)return <main className="spts-page"><h1>Profile not found</h1><a href="/profiles">Get your own profile</a></main>;
  if(!p)return <main className="spts-page"><p className="spts-muted">Loading…</p></main>;
  const contacts=detectContacts(p.bio||"");
  const canDeletePosts=!!user&&user.uid===p.uid;
- return <main className="spts-public"><header><div>{p.photoUrl&&<img className="spts-avatar" src={p.photoUrl} alt=""/>}<h1>{p.displayName}</h1><p>@{p.username}</p></div><a href="/profiles">Get your own profile</a></header>
+  return <main className="spts-public"><header><div>{p.photoUrl&&<img className="spts-avatar" src={p.photoUrl} alt=""/>}<h1>{p.displayName}</h1><p>@{p.username}</p></div><a href="/profiles">Get your own profile</a></header>
  <section className="spts-card"><p className="spts-bio"><LinkText text={p.bio||""}/></p>{p.websiteUrl&&<p>🌐 <a href={p.websiteUrl} target="_blank" rel="noreferrer">{p.websiteUrl}</a></p>}{p.email&&<p>✉️ <a href={`mailto:${p.email}`}>{p.email}</a></p>}{p.phone&&<p>📞 <a href={`tel:${p.phone}`}>{p.phone}</a></p>}<small className="spts-muted">{contacts.urls.length+contacts.emails.length+contacts.phones.length} contact/link items detected</small><br/><button className="spts-ghost" onClick={()=>navigator.clipboard?.writeText(location.href)}>Share profile</button></section>
  <section className="spts-card"><h2>Posts</h2>{posts.length===0&&<p className="spts-muted">No posts yet.</p>}{posts.map(x=><PostCard key={x.id} post={x} user={user} canDeletePost={canDeletePosts} onDeletePost={()=>deletePost(x.id)}/>)}</section>
- <section className="spts-card"><h2>Message anonymously</h2><p className="spts-muted">{MIN_MESSAGE}-{MAX_MESSAGE} characters · {MAX_MESSAGES} messages/replies per conversation</p><textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Anonymous message" disabled={sending}/><SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>{err&&<p className="spts-error">{err}</p>}</section></main>
-}
-
+ <section className="spts-card"><h2>Message anonymously</h2><p className="spts-muted">{MIN_MESSAGE}-{MAX_MESSAGE} characters · {MAX_MESSAGES} messages/replies per conversation</p><textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Anonymous message" disabled={sending}/><SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>{err&&<p className="spts-error">{err}</p>}</section>
+ <section className="spts-card"><h2>Your conversation</h2><p className="spts-muted">Replies from {p.displayName} will appear here.</p><ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()}/></section></main>
+ }
 /* ------------------------------------------------------------------ *
  * Root
  * ------------------------------------------------------------------ */
