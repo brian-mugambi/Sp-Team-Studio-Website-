@@ -39,3 +39,18 @@
 .spts-conversation-head{color:var(--cyan);font-size:0.75rem;letter-spacing:0.04em;margin-bottom:8px;}
 .spts-message{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;}
 .spts-message button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;}
+
+/* --- Replies (additive; nothing above depends on these) --- */
+.spts-message{flex-wrap:wrap;}
+.spts-message-actions{display:flex;gap:8px;align-items:center;}
+.spts-message-actions button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;padding:6px 10px;font-size:0.8rem;}
+.spts-replies{flex-basis:100%;margin:6px 0 4px 0;padding-left:12px;border-left:2px solid var(--faintest);display:flex;flex-direction:column;gap:6px;}
+.spts-reply{display:flex;align-items:flex-start;gap:10px;padding:6px 10px;border-radius:9px;background:rgba(255,255,255,0.02);border:1px solid var(--faintest);}
+.spts-reply p{flex:1;color:var(--white);font-size:0.9rem;line-height:1.4;word-break:break-word;}
+.spts-reply-owner{background:rgba(0,229,255,0.05);border-color:rgba(0,229,255,0.2);}
+.spts-reply-visitor{background:rgba(255,255,255,0.03);}
+.spts-reply-role{font-size:0.65rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);min-width:52px;padding-top:2px;}
+.spts-reply button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;padding:4px 8px;font-size:0.75rem;}
+.spts-reply-form{display:flex;gap:8px;margin-top:2px;}
+.spts-reply-form input{flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--white);font-size:0.85rem;}
+.spts-reply-form button{padding:8px 12px;font-size:0.85rem;}
