@@ -10,6 +10,9 @@ export function Footer() {
             <span className="bracket">]</span>
           </div>
           <p className="footer-tagline">Digital Strategy &amp; Engineering</p>
+          <a href="/profiles" className="footer-link">
+            <i className="fas fa-user" /> Create your profile
+          </a>
         </div>
         <div className="footer-right">
           <p className="footer-year">{year} · SP Team Studio</p>
