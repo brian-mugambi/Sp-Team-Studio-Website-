@@ -342,7 +342,7 @@ function ReplyThread({
 /* ------------------------------------------------------------------ *
  * ConversationThread
  * ------------------------------------------------------------------ */
-function ConversationThread({conversationId,visitorId}:{conversationId:string;visitorId:string}){
+function ConversationThread({conversationId,visitorId,viewerRole="owner"}:{conversationId:string;visitorId:string;viewerRole?:"owner"|"visitor"}){
  const [messages,setMessages]=useState<any[]>([]),[decrypted,setDecrypted]=useState<Record<string,string>>({}),[loading,setLoading]=useState(true),[err,setErr]=useState("");
  const [openReplies,setOpenReplies]=useState<Record<string,boolean>>({});
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
@@ -391,8 +391,8 @@ setMessages(docs);setLoading(false);
    {openReplies[m.id]&&<ReplyThread
     conversationId={conversationId}
     messageId={m.id}
-    viewerRole="owner"
-    canReply
+    viewerRole={viewerRole}
+canReply
    />}
   </div>)}
  </div>;
@@ -620,8 +620,8 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  <section className="spts-card"><p className="spts-bio"><LinkText text={p.bio||""}/></p>{p.websiteUrl&&<p>🌐 <a href={p.websiteUrl} target="_blank" rel="noreferrer">{p.websiteUrl}</a></p>}{p.email&&<p>✉️ <a href={`mailto:${p.email}`}>{p.email}</a></p>}{p.phone&&<p>📞 <a href={`tel:${p.phone}`}>{p.phone}</a></p>}<small className="spts-muted">{contacts.urls.length+contacts.emails.length+contacts.phones.length} contact/link items detected</small><br/><button className="spts-ghost" onClick={()=>navigator.clipboard?.writeText(location.href)}>Share profile</button></section>
  <section className="spts-card"><h2>Posts</h2>{posts.length===0&&<p className="spts-muted">No posts yet.</p>}{posts.map(x=><PostCard key={x.id} post={x} user={user} canDeletePost={canDeletePosts} onDeletePost={()=>deletePost(x.id)}/>)}</section>
  <section className="spts-card"><h2>Message anonymously</h2><p className="spts-muted">{MIN_MESSAGE}-{MAX_MESSAGE} characters · {MAX_MESSAGES} messages/replies per conversation</p><textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Anonymous message" disabled={sending}/><SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>{err&&<p className="spts-error">{err}</p>}</section>
- <section className="spts-card"><h2>Your conversation</h2><p className="spts-muted">Replies from {p.displayName} will appear here.</p><ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()}/></section></main>
- }
+ <section className="spts-card"><h2>Your conversation</h2><p className="spts-muted">Replies from {p.displayName} will appear here.</p><ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()} viewerRole="visitor"/></section></main>
+}
 /* ------------------------------------------------------------------ *
  * Root
  * ------------------------------------------------------------------ */
