@@ -16,7 +16,7 @@ type Toast = { id: number; kind: "success"|"error"|"info"; text: string };
 const ToastCtx = React.createContext<(kind: Toast["kind"], text: string)=>void>(()=>{});
 function useToast(){ return React.useContext(ToastCtx); }
 
-function ToastHost(){
+function ToastHost({children}:{children?:React.ReactNode}){
  const [items,setItems]=useState<Toast[]>([]);
  const idRef=useRef(0);
  function push(kind:Toast["kind"],text:string){
@@ -25,6 +25,7 @@ function ToastHost(){
   setTimeout(()=>setItems(s=>s.filter(t=>t.id!==id)),4200);
  }
  return <ToastCtx.Provider value={push}>
+  {children}
   <div className="spts-toast-host" role="status" aria-live="polite">
    {items.map(t=><div key={t.id} className={`spts-toast spts-toast-${t.kind}`} onClick={()=>setItems(s=>s.filter(x=>x.id!==t.id))}>
     <span className="spts-toast-icon">{t.kind==="success"?"✓":t.kind==="error"?"!":"i"}</span>
@@ -41,14 +42,14 @@ type ConfirmOpts = {
  confirmLabel?: string;
  cancelLabel?: string;
  danger?: boolean;
- requireText?: string;         // if set, user must type this to enable confirm
+ requireText?: string;
  requireTextHint?: string;
 };
 type ConfirmHandle = (opts: ConfirmOpts)=>Promise<boolean>;
 const ConfirmCtx = React.createContext<ConfirmHandle>(async()=>false);
 function useConfirm(){ return React.useContext(ConfirmCtx); }
 
-function ConfirmHost(){
+function ConfirmHost({children}:{children?:React.ReactNode}){
  const [opts,setOpts]=useState<ConfirmOpts|null>(null);
  const [typed,setTyped]=useState("");
  const resolverRef=useRef<((v:boolean)=>void)|null>(null);
@@ -65,6 +66,7 @@ function ConfirmHost(){
  const canConfirm = opts ? (!opts.requireText || typed.trim()===opts.requireText) : false;
 
  return <ConfirmCtx.Provider value={open}>
+  {children}
   {opts&&<div className="spts-modal-backdrop" role="dialog" aria-modal="true" onClick={()=>close(false)}>
    <div className="spts-modal" onClick={e=>e.stopPropagation()}>
     <h3 className="spts-modal-title">{opts.title}</h3>
@@ -224,7 +226,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   {post.mediaType==="video"?<video src={post.mediaUrl} controls/>:<img src={post.mediaUrl} alt={post.caption}/>}
   <p><LinkText text={post.caption}/></p>
   <div className="spts-post-actions">
-   <SpinnerButton busy={likeBusy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike} disabled={!user&&false}>
+   <SpinnerButton busy={likeBusy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike}>
     {liked?"♥":"♡"} {likeCount}
    </SpinnerButton>
    {canDeletePost&&<SpinnerButton className="spts-ghost" busy={deleteBusy} busyLabel="Deleting…" onClick={handleDeletePost}>Delete post</SpinnerButton>}
@@ -395,6 +397,7 @@ function ConversationThread({conversationId,visitorId}:{conversationId:string;vi
   </div>)}
  </div>;
 }
+
 /* ------------------------------------------------------------------ *
  * Messages inbox
  * ------------------------------------------------------------------ */
@@ -630,4 +633,4 @@ export default function ProfileNetwork({username}:{username?:string}){
  return <ToastHost><ConfirmHost>
   {username?<PublicProfile username={username} user={user}/>:user?<Dashboard user={user}/>:<main className="spts-page"><Auth done={()=>{}}/></main>}
  </ConfirmHost></ToastHost>;
-                              }
+  }
