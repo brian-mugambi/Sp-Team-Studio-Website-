@@ -269,7 +269,7 @@ function ReplyThread({
    limit(MAX_REPLIES_PER_MESSAGE)
   );
   return onSnapshot(q,async s=>{
-   const docs=s.docs.map(d=>({id:d.id,...d.data()} as any));
+   const docs:any[]=s.docs.map(d=>({id:d.id,...d.data()}));
    setReplies(docs);
    const out:Record<string,string>={};
    await Promise.all(docs.map(async r=>{
@@ -351,8 +351,8 @@ function ConversationThread({conversationId,visitorId}:{conversationId:string;vi
  useEffect(()=>{
   const q=query(collection(profileDb,"conversations",conversationId,"messages"),orderBy("createdAt","asc"),limit(MAX_MESSAGES*2));
   return onSnapshot(q,async s=>{
-   const docs=s.docs.map(d=>({id:d.id,...d.data()} as any));
-   setMessages(docs);setLoading(false);
+   const docs:any[]=s.docs.map(d=>({id:d.id,...d.data()}));
+setMessages(docs);setLoading(false);
    const out:Record<string,string>={};
    await Promise.all(docs.map(async m=>{
     try{ out[m.id]=await decryptMessage(m.ciphertext,m.time,m.deviceId,m.iv); }
