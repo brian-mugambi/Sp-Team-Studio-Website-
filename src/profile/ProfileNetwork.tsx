@@ -50,7 +50,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
    setLiked(!!user&&s.docs.some(d=>d.id===user.uid));
   },e=>setErr(e.message));
   const unsubComments=onSnapshot(query(collection(profileDb,"posts",post.id,"comments"),orderBy("createdAt","asc"),limit(200)),s=>{
-   setComments(s.docs.map(d=>({id:d.id,...d.data()})));
+   setComments(s.docs.map(d=>({id:d.id,...d.data()} as any)));
   },e=>setErr(e.message));
   return ()=>{unsubLikes();unsubComments()};
  },[post.id,user?.uid]);
@@ -107,7 +107,7 @@ function ConversationThread({conversationId,visitorId}:{conversationId:string;vi
  useEffect(()=>{
   const q=query(collection(profileDb,"conversations",conversationId,"messages"),orderBy("createdAt","asc"),limit(MAX_MESSAGES*2));
   return onSnapshot(q,async s=>{
-   const docs=s.docs.map(d=>({id:d.id,...d.data()}));
+   const docs=s.docs.map(d=>({id:d.id,...d.data()} as any));
    setMessages(docs);setLoading(false);
    const out:Record<string,string>={};
    for(const m of docs){try{out[m.id]=await decryptMessage(m.ciphertext,m.time,m.deviceId,m.iv)}catch{out[m.id]="[unable to decrypt]"}}
@@ -136,7 +136,7 @@ function Messages({user}:{user:User}){
  const [conversations,setConversations]=useState<any[]>([]),[loading,setLoading]=useState(true),[err,setErr]=useState("");
  useEffect(()=>{
   const q=query(collection(profileDb,"conversations"),where("profileOwnerId","==",user.uid));
-  return onSnapshot(q,s=>{setConversations(s.docs.map(d=>({id:d.id,...d.data()})));setLoading(false)},e=>{setErr(e.message);setLoading(false)});
+  return onSnapshot(q,s=>{setConversations(s.docs.map(d=>({id:d.id,...d.data()} as any)));setLoading(false)},e=>{setErr(e.message);setLoading(false)});
  },[user.uid]);
  return <section className="spts-card">
   <div className="spts-card-head"><h2>Inbox</h2><span className="spts-badge">{conversations.length}</span></div>
@@ -160,7 +160,7 @@ function Dashboard({user}:{user:User}){
   setLoadingProfile(false);
  })();
  const q=query(collection(profileDb,"posts"),where("ownerId","==",user.uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
- return onSnapshot(q,s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))),e=>setErr(e.message));
+ return onSnapshot(q,s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(e.message));
  },[user.uid]);
  async function save(e:React.FormEvent){e.preventDefault();const x=normalizeUsername(u);if(!validUsername(x)){setErr("Username must be 3-24 letters, numbers or underscore.");return}try{
   const old=await getDoc(doc(profileDb,"profiles",x));if(old.exists()&&old.data().uid!==user.uid){setErr("Username already exists.");return}
@@ -228,7 +228,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   if(!s.exists()){setNotFound(true);return}
   setP(s.data());
   const q=query(collection(profileDb,"posts"),where("ownerId","==",s.data().uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
-  onSnapshot(q,x=>setPosts(x.docs.map(d=>({id:d.id,...d.data()}))),e=>setErr(e.message));
+  onSnapshot(q,x=>setPosts(x.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(e.message));
  }catch(x:any){setErr(x.message||"Unable to load profile")}})()},[username]);
  async function send(){setErr("");if(!p)return;if(!validMessage(msg))return setErr(`Message must be ${MIN_MESSAGE}-${MAX_MESSAGE} characters.`);if(count>=MAX_MESSAGES)return setErr("Conversation limit reached.");try{
   const visitor=getDeviceId(),cid=`${p.uid}_${visitor}`,cr=doc(profileDb,"conversations",cid),s=await getDoc(cr),n=s.exists()?s.data().messageCount||0:0;if(n>=MAX_MESSAGES)return setErr("Conversation limit reached.");
