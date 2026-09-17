@@ -1,3 +1,6 @@
+/* ------------------------------------------------------------------ *
+ * Base page + cards
+ * ------------------------------------------------------------------ */
 .spts-page,.spts-public{max-width:900px;margin:auto;padding:32px 18px;color:var(--ink);}
 .spts-card{border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0;background:rgba(255,255,255,0.02);}
 .spts-card-head{display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:10px;}
@@ -40,7 +43,9 @@
 .spts-message{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;}
 .spts-message button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;}
 
-/* --- Replies (additive; nothing above depends on these) --- */
+/* ------------------------------------------------------------------ *
+ * Replies (additive)
+ * ------------------------------------------------------------------ */
 .spts-message{flex-wrap:wrap;}
 .spts-message-actions{display:flex;gap:8px;align-items:center;}
 .spts-message-actions button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;padding:6px 10px;font-size:0.8rem;}
@@ -54,3 +59,41 @@
 .spts-reply-form{display:flex;gap:8px;margin-top:2px;}
 .spts-reply-form input{flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--white);font-size:0.85rem;}
 .spts-reply-form button{padding:8px 12px;font-size:0.85rem;}
+
+/* ------------------------------------------------------------------ *
+ * Toasts
+ * ------------------------------------------------------------------ */
+.spts-toast-host{position:fixed;top:16px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:1000;max-width:min(380px,90vw);}
+.spts-toast{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:rgba(20,20,30,0.95);color:var(--white);font-size:0.85rem;cursor:pointer;animation:spts-toast-in .18s ease-out;box-shadow:0 8px 24px rgba(0,0,0,.35);}
+.spts-toast-icon{display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;border-radius:50%;font-weight:700;font-size:0.7rem;flex:0 0 auto;}
+.spts-toast-success{border-color:rgba(0,229,255,0.4);}
+.spts-toast-success .spts-toast-icon{background:var(--cyan);color:#06060f;}
+.spts-toast-error{border-color:#ff6b81;}
+.spts-toast-error .spts-toast-icon{background:#ff6b81;color:#06060f;}
+.spts-toast-info .spts-toast-icon{background:var(--faint);color:var(--white);}
+@keyframes spts-toast-in{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+
+/* ------------------------------------------------------------------ *
+ * Modal / confirm dialog
+ * ------------------------------------------------------------------ */
+.spts-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:1001;animation:spts-fade .15s ease-out;}
+@keyframes spts-fade{from{opacity:0;}to{opacity:1;}}
+.spts-modal{width:100%;max-width:460px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:0 16px 48px rgba(0,0,0,.5);}
+.spts-modal-title{color:var(--white);font-size:1rem;margin-bottom:10px;}
+.spts-modal-body{color:var(--muted);font-size:0.88rem;line-height:1.55;display:grid;gap:8px;}
+.spts-modal-list{margin:4px 0 0 18px;padding:0;display:grid;gap:4px;font-size:0.85rem;}
+.spts-modal-typed{display:grid;gap:6px;margin-top:12px;font-size:0.8rem;}
+.spts-modal-typed input{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--white);font:inherit;}
+.spts-modal-typed input:focus{outline:none;border-color:var(--cyan);}
+.spts-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+
+/* ------------------------------------------------------------------ *
+ * Spinner (used inside SpinnerButton)
+ * ------------------------------------------------------------------ */
+.spts-spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;margin-right:6px;vertical-align:-2px;animation:spts-spin .7s linear infinite;}
+@keyframes spts-spin{to{transform:rotate(360deg);}}
+
+/* ------------------------------------------------------------------ *
+ * Empty state
+ * ------------------------------------------------------------------ */
+.spts-empty{display:grid;gap:10px;justify-items:start;padding:8px 0;}
