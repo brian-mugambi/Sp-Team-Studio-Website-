@@ -1,1 +1,41 @@
-.spts-page,.spts-public{max-width:900px;margin:auto;padding:32px 18px}.spts-card{border:1px solid #ddd;border-radius:16px;padding:20px;margin:16px 0;background:#fff}.spts-card form{display:grid;gap:12px}.spts-card input,.spts-card textarea{padding:12px;border:1px solid #ccc;border-radius:10px;font:inherit}.spts-card textarea{min-height:100px}.spts-card button,button{padding:10px 14px;border:0;border-radius:9px;cursor:pointer}.spts-error{color:#b00020}.spts-danger{background:#b00020;color:white}.spts-post{border-top:1px solid #eee;padding:16px 0}.spts-post img,.spts-post video{max-width:100%;max-height:650px;border-radius:12px}.spts-avatar{width:110px;height:110px;object-fit:cover;border-radius:50%}.spts-public header,.spts-page header{display:flex;justify-content:space-between;gap:20px}.spts-bio{white-space:pre-wrap;line-height:1.6}.spts-link{background:none;text-decoration:underline}
+.spts-page,.spts-public{max-width:900px;margin:auto;padding:32px 18px;color:var(--ink);}
+.spts-card{border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0;background:rgba(255,255,255,0.02);}
+.spts-card-head{display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:10px;}
+.spts-card h2{color:var(--white);font-size:1.05rem;letter-spacing:0.02em;}
+.spts-badge{background:var(--faintest);color:var(--cyan);font-size:0.7rem;padding:2px 10px;border-radius:999px;letter-spacing:0.03em;}
+.spts-card form{display:grid;gap:14px;margin-top:6px;}
+.spts-card label{display:grid;gap:6px;font-size:0.75rem;color:var(--muted);letter-spacing:0.02em;}
+.spts-card input,.spts-card textarea{padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--bg);color:var(--white);}
+.spts-card input:focus,.spts-card textarea:focus{outline:none;border-color:var(--cyan);}
+.spts-card textarea{min-height:100px;resize:vertical;}
+.spts-card button,button{padding:10px 14px;border:0;border-radius:9px;cursor:pointer;background:var(--cyan);color:#06060f;font-weight:600;}
+.spts-card button:disabled,button:disabled{opacity:0.4;cursor:not-allowed;}
+.spts-ghost{background:transparent!important;color:var(--muted)!important;border:1px solid var(--line)!important;font-weight:400!important;}
+.spts-form-actions{display:flex;gap:10px;}
+.spts-error{color:#ff6b81;font-size:0.85rem;}
+.spts-danger{background:transparent;color:#ff6b81;border:1px solid #ff6b81;font-weight:400;}
+.spts-muted{color:var(--faint);font-size:0.85rem;}
+.spts-post{border-top:1px solid var(--line);padding:16px 0;}
+.spts-post img,.spts-post video{max-width:100%;max-height:650px;border-radius:12px;}
+.spts-avatar{width:110px;height:110px;object-fit:cover;border-radius:50%;border:1px solid var(--line);}
+.spts-avatar-sm{width:56px;height:56px;object-fit:cover;border-radius:50%;border:1px solid var(--line);}
+.spts-public header,.spts-page header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;}
+.spts-public header a,.spts-page header a{color:var(--cyan);font-size:0.85rem;}
+.spts-page h1{color:var(--white);}
+.spts-bio{white-space:pre-wrap;line-height:1.6;}
+.spts-link{background:none;text-decoration:underline;color:var(--cyan);padding:0;}
+.spts-post-actions{display:flex;gap:10px;align-items:center;margin:10px 0;}
+.spts-post-actions button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;}
+.spts-post-actions .spts-liked{color:#e0245e;border-color:#e0245e;}
+.spts-comments{display:flex;flex-direction:column;gap:8px;}
+.spts-comment{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--faintest);}
+.spts-comments form{display:flex;gap:8px;margin-top:6px;}
+.spts-comments input{flex:1;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--white);}
+.spts-profile-summary{display:flex;gap:14px;align-items:flex-start;}
+.spts-profile-summary .spts-name{color:var(--white);font-weight:600;}
+.spts-profile-summary-actions{margin-left:auto;display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
+.spts-profile-summary-actions a{color:var(--cyan);font-size:0.8rem;}
+.spts-conversation{border-top:1px solid var(--line);padding:12px 0;}
+.spts-conversation-head{color:var(--cyan);font-size:0.75rem;letter-spacing:0.04em;margin-bottom:8px;}
+.spts-message{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;}
+.spts-message button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;}
