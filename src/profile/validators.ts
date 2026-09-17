@@ -3,6 +3,14 @@ export const MAX_MESSAGES = 5;
 export const MIN_MESSAGE = 10;
 export const MAX_MESSAGE = 50;
 
+// Replies are a nested layer under a single message. They share the message
+// character limits, but are capped per-message so one thread can't grow
+// unbounded. Deleting a message removes its replies (cascadeMessage); deleting
+// a reply touches nothing else.
+export const MAX_REPLIES_PER_MESSAGE = 20;
+export const MIN_REPLY = MIN_MESSAGE;
+export const MAX_REPLY = MAX_MESSAGE;
+
 export function normalizeUsername(v: string) { return v.trim().toLowerCase(); }
 export function validUsername(v: string) { return /^[a-z0-9_]{3,24}$/.test(v); }
 export function validMessage(v: string) {
