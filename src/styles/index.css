@@ -597,6 +597,9 @@ img { max-width: 100%; display: block; }
 .footer-logo { color: var(--cyan); font-size: 1rem; margin-bottom: 8px; }
 .footer-logo-white { color: var(--white); }
 .footer-tagline { color: var(--faint); font-size: 0.7rem; margin-top: 8px; }
+.footer-link { display: inline-flex; align-items: center; gap: 6px; color: var(--cyan); font-size: 0.7rem; margin-top: 12px; text-decoration: none; letter-spacing: 0.03em; }
+.footer-link:hover { text-decoration: underline; }
+.footer-link i { font-size: 0.65rem; }
 .footer-right { text-align: right; }
 .footer-year { color: var(--faint); font-size: 0.7rem; letter-spacing: 0.05em; }
 .footer-icon { color: var(--faintest); font-size: 0.6rem; margin-top: 4px; }
