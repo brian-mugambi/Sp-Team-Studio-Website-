@@ -17,10 +17,16 @@ import ProfileNetwork from './profile/ProfileNetwork';
 
 function useProfileRoute() {
   const path = window.location.pathname;
-  if (path === '/profiles') return { active: true, username: undefined };
-  const match = path.match(/^\/profile\/([^/]+)\/?$/);
-  if (match) return { active: true, username: decodeURIComponent(match[1]) };
-  return { active: false, username: undefined };
+  if (path === '/profiles') return { active: true, username: undefined, view: undefined };
+  const match = path.match(/^\/profile\/([^/]+)(\/ad)?\/?$/);
+  if (match) {
+    return {
+      active: true,
+      username: decodeURIComponent(match[1]),
+      view: match[2] ? ('ad' as const) : undefined,
+    };
+  }
+  return { active: false, username: undefined, view: undefined };
 }
 
 export default function App() {
@@ -29,7 +35,7 @@ export default function App() {
   const route = useProfileRoute();
 
   if (route.active) {
-    return <ProfileNetwork username={route.username} />;
+    return <ProfileNetwork username={route.username} view={route.view} />;
   }
 
   return (
