@@ -117,12 +117,12 @@ const LinkText=({text}:{text:string})=><>{text.split(/(https?:\/\/[^\s]+|[A-Z0-9
  * Auto-delete warnings — shown wherever content is created, so
  * everyone understands the 24h deletion depends on this device.
  * ------------------------------------------------------------------ */
-const TTL_DEVICE_CAVEAT="Only works if you come back on this same browser/device — using a different device, or clearing your browser data, may stop it from being deleted.";
+const TTL_DEVICE_CAVEAT="Auto delete works when you're online.";
 function AutoDeleteNotice({text}:{text:string}){
  return <p className="spts-ttl-notice"><span aria-hidden="true">⏳</span> {text} {TTL_DEVICE_CAVEAT}</p>;
 }
 function AutoDeleteNoticeSm({text}:{text:string}){
- return <small className="spts-ttl-notice-sm">⏳ {text} Depends on this browser/device — a different device or cleared data may stop it.</small>;
+ return <small className="spts-ttl-notice-sm"> {text} Different device or cleared data removes auto delete.</small>;
 }
 
 /* ------------------------------------------------------------------ *
