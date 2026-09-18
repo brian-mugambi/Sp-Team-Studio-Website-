@@ -270,3 +270,38 @@ video.spts-media-el{cursor:pointer;}
  .spts-media-frame{max-width:100%;max-height:80vh;}
  .spts-media-square,.spts-media-landscape{max-width:100%;}
 }
+
+/* ==================================================================== *
+ * Public-profile message box — the compose field and the visitor's
+ * own conversation (messages + replies) merged into one chat-style
+ * card. Reuses ConversationThread/ReplyThread as-is; scoped so the
+ * owner's Dashboard inbox (.spts-conversation outside .spts-messagebox)
+ * is untouched.
+ * ==================================================================== */
+.spts-messagebox-thread{
+ margin-top:12px;max-height:420px;overflow-y:auto;
+ border:1px solid var(--faintest);border-radius:12px;
+ background:rgba(255,255,255,0.015);padding:4px 12px;
+}
+.spts-messagebox .spts-conversation{border-top:0;padding:8px 0;}
+.spts-messagebox .spts-conversation-head{display:none;}
+.spts-messagebox .spts-message{
+ flex-direction:column;align-items:stretch;gap:6px;
+ background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.15);
+ border-radius:12px;padding:10px 12px;margin:8px 0;
+}
+.spts-messagebox .spts-message > p{color:var(--white);line-height:1.45;}
+.spts-messagebox .spts-message-actions{justify-content:flex-end;}
+.spts-messagebox .spts-replies{margin-top:2px;}
+.spts-messagebox-compose{display:flex;gap:10px;align-items:flex-end;margin-top:14px;}
+.spts-messagebox-compose textarea{
+ flex:1;height:46px;max-height:140px;padding:12px;resize:vertical;
+ border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--white);font:inherit;
+}
+.spts-messagebox-compose textarea:focus{outline:none;border-color:var(--cyan);}
+.spts-messagebox-compose button{flex:0 0 auto;align-self:stretch;}
+
+@media (max-width:480px){
+ .spts-messagebox-thread{max-height:340px;}
+ .spts-messagebox-compose{flex-direction:column;align-items:stretch;}
+}

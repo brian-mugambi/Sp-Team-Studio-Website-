@@ -847,19 +847,20 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   {showAllPosts&&posts.length>POST_PREVIEW_COUNT&&<button type="button" className="spts-see-more spts-ghost" onClick={()=>setShowAllPosts(false)}>Show less</button>}
  </section>
 
- <section className="spts-card spts-section">
-  <div className="spts-card-head"><h2>Message anonymously</h2></div>
-  <p className="spts-muted">{MIN_MESSAGE}-{MAX_MESSAGE} characters · {MAX_MESSAGES} messages/replies per conversation</p>
-  <AutoDeleteNotice text="Your message (and any replies) auto-delete 24h after they're sent."/>
-  <textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Anonymous message" disabled={sending}/>
-  <SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>
-  {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{err}</span></div>}
- </section>
+ <section className="spts-card spts-section spts-messagebox">
+  <div className="spts-card-head"><h2>Message {p.displayName}</h2></div>
+  <p className="spts-muted">{MIN_MESSAGE}-{MAX_MESSAGE} characters · {MAX_MESSAGES} messages/replies per conversation. You can reply to any reply you get back — right here.</p>
+  <AutoDeleteNotice text="Messages (and any replies) auto-delete 24h after they're sent."/>
 
- <section className="spts-card spts-section">
-  <div className="spts-card-head"><h2>Your conversation</h2></div>
-  <p className="spts-muted">Replies from {p.displayName} will appear here.</p>
-  <ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()} viewerRole="visitor" previewCount={3}/>
+  <div className="spts-messagebox-thread">
+   <ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()} viewerRole="visitor" previewCount={3}/>
+  </div>
+
+  <div className="spts-messagebox-compose">
+   <textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Type an anonymous message…" disabled={sending}/>
+   <SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>
+  </div>
+  {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{err}</span></div>}
  </section>
 
  </main>
