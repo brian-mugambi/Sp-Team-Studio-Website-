@@ -305,3 +305,56 @@ video.spts-media-el{cursor:pointer;}
  .spts-messagebox-thread{max-height:340px;}
  .spts-messagebox-compose{flex-direction:column;align-items:stretch;}
 }
+
+/* ==================================================================== *
+ * Premium — Dashboard controls (badge, upgrade button, file upload)
+ * ==================================================================== */
+.spts-card-head-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.spts-premium-tag{
+ display:inline-flex;align-items:center;gap:4px;
+ padding:3px 10px;border-radius:999px;font-size:0.7rem;font-weight:700;letter-spacing:0.03em;
+ background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;
+}
+.spts-premium-tag-sm{padding:1px 8px;font-size:0.62rem;margin-left:6px;}
+.spts-upgrade-btn{
+ display:inline-flex;align-items:center;gap:6px;
+ padding:8px 14px;border-radius:9px;font-weight:700;font-size:0.8rem;
+ background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;text-decoration:none;
+}
+.spts-upgrade-btn:hover{filter:brightness(1.06);}
+.spts-fileupload-row{display:grid;gap:6px;}
+.spts-fileupload-row input[type=file]{
+ padding:10px;border:1px dashed var(--line);border-radius:10px;
+ background:var(--bg);color:var(--muted);font-size:0.8rem;font-family:inherit;
+}
+.spts-upgrade-confirm{text-align:center;display:grid;gap:10px;justify-items:center;padding:24px 12px;}
+.spts-upgrade-confirm h2{color:var(--white);}
+
+/* ==================================================================== *
+ * Premium public-profile theme — additive skin on top of the base
+ * theme, applied only when the profile owner is premium.
+ * ==================================================================== */
+.spts-premium-badge{
+ display:inline-flex;align-items:center;gap:4px;margin-top:6px;
+ padding:3px 10px;border-radius:999px;font-size:0.7rem;font-weight:700;letter-spacing:0.04em;
+ background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;
+}
+.spts-public.spts-premium .spts-profile-hero{
+ background:radial-gradient(120% 140% at 50% -20%,rgba(255,197,92,0.16),transparent 60%),linear-gradient(160deg,rgba(255,197,92,0.05),rgba(139,92,246,0.05));
+ border-color:rgba(255,197,92,0.35);
+}
+.spts-public.spts-premium .spts-avatar-lg{
+ box-shadow:0 0 0 2px #ffc55c,0 0 36px rgba(255,197,92,0.35);
+}
+.spts-public.spts-premium .spts-profile-handle{color:#ffc55c;}
+.spts-public.spts-premium .spts-card,
+.spts-public.spts-premium .spts-post-grid .spts-post{
+ border-color:rgba(255,197,92,0.22);
+ background:linear-gradient(160deg,rgba(255,197,92,0.035),rgba(255,255,255,0.015));
+}
+.spts-public.spts-premium .spts-meta-chip:hover{border-color:#ffc55c;color:#ffc55c;}
+.spts-public.spts-premium .spts-see-more{color:#ffc55c;}
+.spts-public.spts-premium .spts-see-more:hover{border-color:#ffc55c;}
+.spts-public.spts-premium .spts-messagebox .spts-message{
+ background:rgba(255,197,92,0.06);border-color:rgba(255,197,92,0.2);
+}

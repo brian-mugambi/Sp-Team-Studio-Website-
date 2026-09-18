@@ -1,10 +1,25 @@
 import React, {useEffect,useMemo,useRef,useState} from "react";
 import {createUserWithEmailAndPassword,onAuthStateChanged,signInWithEmailAndPassword,signOut,User} from "firebase/auth";
 import {addDoc,collection,deleteDoc,doc,getDoc,getDocs,increment,limit,onSnapshot,orderBy,query,serverTimestamp,setDoc,where,writeBatch} from "firebase/firestore";
+import {getDownloadURL,getStorage,ref as storageRef,uploadBytes} from "firebase/storage";
 import {profileAuth,profileDb} from "../firebase/profileFirebase";
 import {MAX_MESSAGES,MAX_POSTS,MIN_MESSAGE,MAX_MESSAGE,MAX_REPLIES_PER_MESSAGE,MIN_REPLY,MAX_REPLY,detectContacts,mediaTypeFromUrl,normalizeUsername,validMediaUrl,validMessage,validUsername} from "./validators";
 import {encryptMessage,decryptMessage,getDeviceId} from "./crypto";
 import "./profile.css";
+
+/* ------------------------------------------------------------------ *
+ * Premium — Firebase Storage reuses the same app as profileAuth, so
+ * no change to the firebase config file is needed. The Paystack link
+ * below is a placeholder: swap it for your real Payment Page link
+ * (or generate one per-user server-side later if you want a reference
+ * tied to the visit). Paystack is configured to redirect back to
+ * "<your site>/profile/" after a successful
+ * payment; that special "username" is intercepted in the root
+ * component below and confirms the upgrade instead of loading a
+ * public profile.
+ * ------------------------------------------------------------------ */
+const profileStorage=getStorage(profileAuth.app);
+const PAYSTACK_UPGRADE_URL="https://paystack.shop/pay/bv5n43khmv";
 
 /* ------------------------------------------------------------------ *
  * Shared UI primitives: Toasts, ConfirmDialog, SpinnerButton
@@ -606,12 +621,13 @@ function Dashboard({user}:{user:User}){
  const [profile,setProfile]=useState<any>(null),[posts,setPosts]=useState<any[]>([]),
   [u,setU]=useState(""),[name,setName]=useState(""),[bio,setBio]=useState(""),[photo,setPhoto]=useState(""),[web,setWeb]=useState(""),
   [email,setEmail]=useState(user.email||""),[phone,setPhone]=useState(""),
-  [url,setUrl]=useState(""),[caption,setCaption]=useState(""),
+  [url,setUrl]=useState(""),[caption,setCaption]=useState(""),[file,setFile]=useState<File|null>(null),
   [err,setErr]=useState(""),[editing,setEditing]=useState(true),[loadingProfile,setLoadingProfile]=useState(true);
  const [savingProfile,setSavingProfile]=useState(false);
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [addingPost,setAddingPost]=useState(false);
  const confirm=useConfirm();const toast=useToast();
+ const isPremium=!!profile?.premium;
 
  useEffect(()=>{(async()=>{
   try{
@@ -639,7 +655,7 @@ function Dashboard({user}:{user:User}){
    const p={uid:user.uid,username:x,displayName:name.trim(),bio:bio.trim(),photoUrl:photo.trim(),websiteUrl:web.trim(),email:email.trim(),phone:phone.trim(),updatedAt:serverTimestamp()};
    await setDoc(doc(profileDb,"profiles",x),p,{merge:true});
    await setDoc(doc(profileDb,"users",user.uid),{username:x,updatedAt:serverTimestamp()},{merge:true});
-   setProfile(p);setEditing(false);toast("success","Profile saved.");
+   setProfile((prev:any)=>({...prev,...p}));setEditing(false);toast("success","Profile saved.");
   }catch(x:any){setErr(x.message||"Unable to save profile");toast("error",x.message||"Unable to save profile");}
   finally{setSavingProfile(false);}
  }
@@ -654,12 +670,20 @@ function Dashboard({user}:{user:User}){
  async function add(e:React.FormEvent){
   e.preventDefault();
   if(posts.length>=MAX_POSTS){setErr("Maximum 100 posts.");return;}
-  if(!validMediaUrl(url)){setErr("Use a valid media URL.");return;}
+  if(!file&&!validMediaUrl(url)){setErr("Use a valid media URL.");return;}
   setErr("");setAddingPost(true);
   try{
-   const postRef=await addDoc(collection(profileDb,"posts"),{ownerId:user.uid,mediaUrl:url.trim(),mediaType:mediaTypeFromUrl(url),caption:caption.trim(),createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+   let mediaUrl=url.trim(),mediaType=mediaTypeFromUrl(url);
+   if(file){
+    const path=`posts/${user.uid}/${Date.now()}_${file.name}`;
+    const fileRef=storageRef(profileStorage,path);
+    await uploadBytes(fileRef,file);
+    mediaUrl=await getDownloadURL(fileRef);
+    mediaType=file.type.startsWith("video")?"video":"image";
+   }
+   const postRef=await addDoc(collection(profileDb,"posts"),{ownerId:user.uid,mediaUrl,mediaType,caption:caption.trim(),createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
    scheduleAutoDelete({kind:"post",postId:postRef.id});
-   setUrl("");setCaption("");toast("success","Post added — it auto-deletes in 24h on this device.");
+   setUrl("");setCaption("");setFile(null);toast("success","Post added — it auto-deletes in 24h on this device.");
   }catch(x:any){setErr(x.message||"Unable to add post");toast("error",x.message||"Unable to add post");}
   finally{setAddingPost(false);}
  }
@@ -697,7 +721,14 @@ function Dashboard({user}:{user:User}){
  return <main className="spts-page"><header><h1>Dashboard</h1><button className="spts-ghost" onClick={()=>signOut(profileAuth)}>Log out</button></header>
 
  <section className="spts-card">
-  <div className="spts-card-head"><h2>Profile</h2>{!editing&&profile&&<span className="spts-badge">Live</span>}</div>
+  <div className="spts-card-head">
+   <h2>Profile</h2>
+   <div className="spts-card-head-badges">
+    {!editing&&profile&&<span className="spts-badge">Live</span>}
+    {isPremium&&<span className="spts-premium-tag">✦ Premium</span>}
+    {!isPremium&&profile&&<a className="spts-upgrade-btn" href={`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email||"")}`} target="_blank" rel="noreferrer">Upgrade to Premium</a>}
+   </div>
+  </div>
   {loadingProfile&&<p className="spts-muted">Loading…</p>}
 
   {!loadingProfile&&!editing&&profile&&<div className="spts-profile-summary">
@@ -735,12 +766,15 @@ function Dashboard({user}:{user:User}){
 
  <section className="spts-card">
   <div className="spts-card-head"><h2>Posts</h2><span className="spts-badge">{posts.length}/{MAX_POSTS}</span></div>
-  <p className="spts-muted">URLs only — no uploads.</p>
+  <p className="spts-muted">{isPremium?"Paste a URL, or upload a file directly.":"URLs only — no uploads. Upgrade to Premium to upload files directly."}</p>
   <AutoDeleteNotice text="Posts (and their likes and comments) auto-delete 24h after you add them."/>
   <form onSubmit={add}>
-   <label>Photo/video URL<input required placeholder="https://…" value={url} onChange={e=>setUrl(e.target.value)} disabled={addingPost}/></label>
+   <label>Photo/video URL<input required={!isPremium} placeholder="https://…" value={url} onChange={e=>setUrl(e.target.value)} disabled={addingPost||!!file}/></label>
+   {isPremium&&<label className="spts-fileupload-row">Or upload a file <span className="spts-premium-tag spts-premium-tag-sm">✦ Premium</span>
+    <input type="file" accept="image/*,video/*" onChange={e=>setFile(e.target.files?.[0]||null)} disabled={addingPost}/>
+   </label>}
    <label>Caption<input maxLength={500} placeholder="Optional caption" value={caption} onChange={e=>setCaption(e.target.value)} disabled={addingPost}/></label>
-   <SpinnerButton type="submit" busy={addingPost} busyLabel="Posting…" disabled={!url.trim()}>Add post</SpinnerButton>
+   <SpinnerButton type="submit" busy={addingPost} busyLabel={file?"Uploading…":"Posting…"} disabled={!url.trim()&&!file}>Add post</SpinnerButton>
   </form>
   {posts.length===0&&<p className="spts-muted">No posts yet.</p>}
   {posts.length>0&&<>
@@ -818,12 +852,13 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   setCopied(true);
   setTimeout(()=>setCopied(false),2000);
  }
- return <main className="spts-public">
+ return <main className={`spts-public${p.premium?" spts-premium":""}`}>
 
  <section className="spts-profile-hero">
   {p.photoUrl?<img className="spts-avatar-lg" src={p.photoUrl} alt={p.displayName}/>:<div className="spts-avatar-lg spts-avatar-fallback" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
   <h1 className="spts-profile-name">{p.displayName}</h1>
   <p className="spts-profile-handle">@{p.username}</p>
+  {p.premium&&<span className="spts-premium-badge">✦ Premium</span>}
   {p.bio&&<p className="spts-bio spts-profile-bio"><LinkText text={p.bio}/></p>}
   {(p.websiteUrl||p.email||p.phone)&&<div className="spts-profile-meta">
    {p.websiteUrl&&<a className="spts-meta-chip" href={p.websiteUrl} target="_blank" rel="noreferrer">🌐 Website</a>}
@@ -865,6 +900,46 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
 
  </main>
 }
+
+/* ------------------------------------------------------------------ *
+ * UpgradeSuccess — landing spot for Paystack's redirect after a
+ * successful payment ("…/profile/upgradesuccessConfirm"). No webhook
+ * or signature check: it simply marks the signed-in user's profile as
+ * premium in Firestore. Simple, as intended — just make sure this URL
+ * is only reachable after Paystack's own successful-payment redirect.
+ * ------------------------------------------------------------------ */
+function UpgradeSuccess({user}:{user:User|null}){
+ const [status,setStatus]=useState<"working"|"done"|"error">("working");
+ const [err,setErr]=useState("");
+ const toast=useToast();
+
+ useEffect(()=>{(async()=>{
+  if(!user){setStatus("error");setErr("Log in with the account you upgraded, then reopen this page.");return;}
+  try{
+   const us=await getDoc(doc(profileDb,"users",user.uid));
+   if(!us.exists()){setStatus("error");setErr("Create your public profile first, then upgrade.");return;}
+   const uname=us.data().username;
+   await setDoc(doc(profileDb,"profiles",uname),{premium:true,updatedAt:serverTimestamp()},{merge:true});
+   setStatus("done");
+   toast("success","You're upgraded to Premium.");
+  }catch(x:any){setStatus("error");setErr(x.message||"Unable to confirm your upgrade.");toast("error",x.message||"Unable to confirm your upgrade.");}
+ })();},[user]);
+
+ return <main className="spts-page"><section className="spts-card spts-upgrade-confirm">
+  {status==="working"&&<><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Confirming your payment…</p></>}
+  {status==="done"&&<>
+   <h2>You're Premium <span aria-hidden="true">✦</span></h2>
+   <p className="spts-muted">Your premium public-profile theme and direct file uploads are unlocked.</p>
+   <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
+  </>}
+  {status==="error"&&<>
+   <h2>Couldn't confirm your upgrade</h2>
+   <p className="spts-error">{err}</p>
+   <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
+  </>}
+ </section></main>;
+}
+
 /* ------------------------------------------------------------------ *
  * Root
  * ------------------------------------------------------------------ */
@@ -878,6 +953,9 @@ export default function ProfileNetwork({username}:{username?:string}){
  },[]);
  if(loading)return <main className="spts-page">Loading…</main>;
  return <ToastHost><ConfirmHost><ActiveVideoHost>
-  {username?<PublicProfile username={username} user={user}/>:user?<Dashboard user={user}/>:<main className="spts-page"><Auth done={()=>{}}/></main>}
+  {username==="upgradesuccessConfirm"?<UpgradeSuccess user={user}/>
+   :username?<PublicProfile username={username} user={user}/>
+   :user?<Dashboard user={user}/>
+   :<main className="spts-page"><Auth done={()=>{}}/></main>}
  </ActiveVideoHost></ConfirmHost></ToastHost>;
   }
