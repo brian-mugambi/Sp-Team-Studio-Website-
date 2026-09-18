@@ -104,6 +104,118 @@ function SpinnerButton({
 }
 
 /* ------------------------------------------------------------------ *
+ * ActiveVideo context — makes sure only one post video plays at a
+ * time. Opening a new video tells every other PostMedia to fall back
+ * to its paused thumbnail frame.
+ * ------------------------------------------------------------------ */
+const ActiveVideoCtx=React.createContext<[string|null,(id:string|null)=>void]>([null,()=>{}]);
+function ActiveVideoHost({children}:{children?:React.ReactNode}){
+ const [activeId,setActiveId]=useState<string|null>(null);
+ return <ActiveVideoCtx.Provider value={[activeId,setActiveId]}>{children}</ActiveVideoCtx.Provider>;
+}
+
+/* ------------------------------------------------------------------ *
+ * PostMedia — portrait-first (9:16) immersive media viewer.
+ * - Starts at a 9:16 frame, then relaxes toward the media's own
+ *   aspect ratio (clamped between 9:16 and 16:9) once it's known, so
+ *   landscape/square media adapt automatically without distortion.
+ * - Videos never autoplay: only a browser-generated thumbnail frame
+ *   is shown (preload="metadata") until the user taps play, and only
+ *   one video across the page plays at a time (ActiveVideoCtx).
+ * - Images load normally; both media types get an expand control for
+ *   a distortion-free full-screen view (object-fit: contain).
+ * ------------------------------------------------------------------ */
+function clampMediaRatio(w:number,h:number):number{
+ if(!w||!h)return 9/16;
+ const r=w/h;
+ return Math.min(16/9,Math.max(9/16,r));
+}
+function PostMedia({post}:{post:any}){
+ const isVideo=post.mediaType==="video";
+ const [activeId,setActiveId]=React.useContext(ActiveVideoCtx);
+ const [opened,setOpened]=useState(false);
+ const [ratio,setRatio]=useState<number|null>(null);
+ const [orientation,setOrientation]=useState<"portrait"|"landscape"|"square">("portrait");
+ const [fullscreen,setFullscreen]=useState(false);
+ const videoRef=useRef<HTMLVideoElement>(null);
+
+ useEffect(()=>{
+  if(isVideo&&opened&&activeId!==post.id){
+   videoRef.current?.pause();
+   setOpened(false);
+  }
+ },[activeId,isVideo,opened,post.id]);
+
+ function applyDims(w:number,h:number){
+  setRatio(clampMediaRatio(w,h));
+  setOrientation(w>h?"landscape":w<h?"portrait":"square");
+ }
+
+ function openVideo(){
+  setActiveId(post.id);
+  setOpened(true);
+  requestAnimationFrame(()=>{videoRef.current?.play().catch(()=>{});});
+ }
+ function onVideoEnded(){
+  setOpened(false);
+  setActiveId(null);
+ }
+
+ const frameStyle:React.CSSProperties={aspectRatio:ratio?String(ratio):"9 / 16"};
+
+ return <div className={`spts-media-frame spts-media-${orientation}`} style={frameStyle}>
+  {isVideo?<>
+   <video
+    ref={videoRef}
+    className="spts-media-el"
+    src={post.mediaUrl}
+    preload={opened?"auto":"metadata"}
+    muted={!opened}
+    playsInline
+    controls={opened}
+    onLoadedMetadata={e=>applyDims(e.currentTarget.videoWidth,e.currentTarget.videoHeight)}
+    onEnded={onVideoEnded}
+    onClick={opened?undefined:openVideo}
+   />
+   {!opened&&<button type="button" className="spts-media-play" onClick={openVideo} aria-label="Play video">
+    <span className="spts-media-play-icon" aria-hidden="true">▶</span>
+   </button>}
+  </>:
+   <img
+    className="spts-media-el"
+    src={post.mediaUrl}
+    alt={post.caption||""}
+    loading="lazy"
+    onLoad={e=>applyDims(e.currentTarget.naturalWidth,e.currentTarget.naturalHeight)}
+    onClick={()=>setFullscreen(true)}
+   />
+  }
+  <button type="button" className="spts-media-expand" onClick={()=>setFullscreen(true)} aria-label="View full screen" title="View full screen">⛶</button>
+  {fullscreen&&<MediaLightbox post={post} isVideo={isVideo} onClose={()=>setFullscreen(false)}/>}
+ </div>;
+}
+
+/* ------------------------------------------------------------------ *
+ * MediaLightbox — distortion-free full-screen viewing (object-fit:
+ * contain regardless of orientation), closable via backdrop/✕/Esc.
+ * ------------------------------------------------------------------ */
+function MediaLightbox({post,isVideo,onClose}:{post:any;isVideo:boolean;onClose:()=>void}){
+ useEffect(()=>{
+  function onKey(e:KeyboardEvent){ if(e.key==="Escape")onClose(); }
+  document.addEventListener("keydown",onKey);
+  return ()=>document.removeEventListener("keydown",onKey);
+ },[onClose]);
+ return <div className="spts-lightbox-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+  <button type="button" className="spts-lightbox-close" onClick={onClose} aria-label="Close full screen view">✕</button>
+  <div className="spts-lightbox-stage" onClick={e=>e.stopPropagation()}>
+   {isVideo
+    ?<video className="spts-lightbox-media" src={post.mediaUrl} controls autoPlay playsInline/>
+    :<img className="spts-lightbox-media" src={post.mediaUrl} alt={post.caption||""}/>}
+  </div>
+ </div>;
+}
+
+/* ------------------------------------------------------------------ *
  * LinkText — unchanged
  * ------------------------------------------------------------------ */
 const LinkText=({text}:{text:string})=><>{text.split(/(https?:\/\/[^\s]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\+?\d[\d\s().-]{7,}\d)/gi).map((x,i)=>{
@@ -285,7 +397,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
  }
 
  return <article className="spts-post">
-  {post.mediaType==="video"?<video src={post.mediaUrl} controls/>:<img src={post.mediaUrl} alt={post.caption}/>}
+  <PostMedia post={post}/>
   <p><LinkText text={post.caption}/></p>
   <div className="spts-post-actions">
    <SpinnerButton busy={likeBusy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike} title="Likes auto-delete after 24h on this device">
@@ -631,7 +743,11 @@ function Dashboard({user}:{user:User}){
    <SpinnerButton type="submit" busy={addingPost} busyLabel="Posting…" disabled={!url.trim()}>Add post</SpinnerButton>
   </form>
   {posts.length===0&&<p className="spts-muted">No posts yet.</p>}
-  {posts.map(p=><PostCard key={p.id} post={p} user={user} canDeletePost onDeletePost={()=>deletePost(p.id)}/>)}
+  {posts.length>0&&<>
+   <PostCard key={posts[0].id} post={posts[0]} user={user} canDeletePost={false} onDeletePost={()=>deletePost(posts[0].id)}/>
+   <p className="spts-muted spts-dashboard-post-hint">Showing your latest post. Manage or delete posts from your public profile, which you own.</p>
+   {profile&&<a className="spts-see-more" href={`/profile/${profile.username}`}>See all posts on your public profile →</a>}
+  </>}
  </section>
 
  <Messages user={user}/>
@@ -760,7 +876,7 @@ export default function ProfileNetwork({username}:{username?:string}){
   return ()=>clearInterval(id);
  },[]);
  if(loading)return <main className="spts-page">Loading…</main>;
- return <ToastHost><ConfirmHost>
+ return <ToastHost><ConfirmHost><ActiveVideoHost>
   {username?<PublicProfile username={username} user={user}/>:user?<Dashboard user={user}/>:<main className="spts-page"><Auth done={()=>{}}/></main>}
- </ConfirmHost></ToastHost>;
+ </ActiveVideoHost></ConfirmHost></ToastHost>;
   }
