@@ -764,6 +764,8 @@ function Dashboard({user}:{user:User}){
   </form>}
  </section>
 
+ {profile&&<AdRequest user={user} profile={profile}/>}
+
  <section className="spts-card">
   <div className="spts-card-head"><h2>Posts</h2><span className="spts-badge">{posts.length}/{MAX_POSTS}</span></div>
   <p className="spts-muted">{isPremium?"Paste a URL, or upload a file directly.":"URLs only — no uploads. Upgrade to Premium to upload files directly."}</p>
@@ -866,6 +868,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    {p.phone&&<a className="spts-meta-chip" href={`tel:${p.phone}`}>📞 Phone</a>}
   </div>}
   <div className="spts-profile-hero-actions">
+   <a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`}>See ad</a>
    <button type="button" className="spts-ghost" onClick={shareProfile}>{copied?"✓ Link copied":"Share profile"}</button>
    <a className="spts-ghost spts-link-btn" href="/profiles">Get your own profile</a>
   </div>
@@ -941,9 +944,112 @@ function UpgradeSuccess({user}:{user:User|null}){
 }
 
 /* ------------------------------------------------------------------ *
+ * Ads
+ *
+ * Firestore layout:
+ *   profiles/{username}/ad/code          -> { html: "<full html string>" }
+ *        Added by hand in the Firestore console. Profile owners never
+ *        touch it. Public read, no client writes.
+ *   adrequest/{ownerUid}/messages/{id}   -> the owner's request
+ *        { ownerId, username, message, liveDate, durationDays,
+ *          deadline, status:"pending", createdAt }
+ *
+ * Public link: /profile/{username}/ad  (AdView below)
+ * ------------------------------------------------------------------ */
+const AD_MIN_MESSAGE=10,AD_MAX_MESSAGE=2000,AD_MAX_DAYS=365;
+function todayLocal(){ return new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10); }
+
+function AdRequest({user,profile}:{user:User;profile:any}){
+ const [msg,setMsg]=useState(""),[live,setLive]=useState(""),[days,setDays]=useState("7"),[deadline,setDeadline]=useState("");
+ const [sending,setSending]=useState(false),[err,setErr]=useState("");
+ const toast=useToast();
+ const today=todayLocal();
+
+ async function submit(e:React.FormEvent){
+  e.preventDefault();
+  const d=Number(days);
+  if(msg.trim().length<AD_MIN_MESSAGE)return setErr(`Describe the ad in at least ${AD_MIN_MESSAGE} characters.`);
+  if(!live||live<today)return setErr("Pick a go-live date that is today or later.");
+  if(!Number.isInteger(d)||d<1||d>AD_MAX_DAYS)return setErr(`Duration must be 1-${AD_MAX_DAYS} days.`);
+  if(!deadline||deadline<today)return setErr("Pick a deadline that is today or later.");
+  if(deadline>live)return setErr("The deadline must be on or before the go-live date.");
+  setErr("");setSending(true);
+  try{
+   await addDoc(collection(profileDb,"adrequest",user.uid,"messages"),{
+    ownerId:user.uid,username:profile.username,message:msg.trim(),
+    liveDate:live,durationDays:d,deadline,status:"pending",createdAt:serverTimestamp(),
+   });
+   setMsg("");setLive("");setDays("7");setDeadline("");
+   toast("success","Ad request sent.");
+  }catch(x:any){setErr(x.message||"Unable to send request");toast("error",x.message||"Unable to send request");}
+  finally{setSending(false);}
+ }
+
+ return <section className="spts-card">
+  <div className="spts-card-head"><h2>Request an ad</h2></div>
+  <p className="spts-muted">Tell us what the ad is for and how it should look. Once it's ready, it goes live at <a href={`/profile/${profile.username}/ad`}>/profile/{profile.username}/ad</a>.</p>
+  <form onSubmit={submit}>
+   <label>What is the ad for?
+    <textarea maxLength={AD_MAX_MESSAGE} placeholder="e.g. I want an ad for my launch event on the 12th, bold and colourful, with a button to book tickets." value={msg} onChange={e=>setMsg(e.target.value)} disabled={sending}/>
+   </label>
+   <label>Go-live date<input type="date" min={today} value={live} onChange={e=>setLive(e.target.value)} disabled={sending}/></label>
+   <label>Duration (days)<input type="number" inputMode="numeric" min={1} max={AD_MAX_DAYS} value={days} onChange={e=>setDays(e.target.value)} disabled={sending}/></label>
+   <label>Deadline (ad must be ready by)<input type="date" min={today} value={deadline} onChange={e=>setDeadline(e.target.value)} disabled={sending}/></label>
+   <div className="spts-form-actions">
+    <SpinnerButton type="submit" busy={sending} busyLabel="Sending…" disabled={!msg.trim()}>Send request</SpinnerButton>
+   </div>
+  </form>
+  {err&&<p className="spts-error">{err}</p>}
+ </section>;
+}
+
+// Public ad page. Reads the html string and runs it in a sandboxed iframe
+// (no allow-same-origin), so the ad code can't reach this app's auth
+// session, storage or DOM.
+function AdView({username}:{username:string}){
+ const uname=normalizeUsername(username);
+ const [state,setState]=useState<"loading"|"ready"|"missing"|"retry">("loading");
+ const [html,setHtml]=useState("");
+ const [tries,setTries]=useState(0);
+
+ useEffect(()=>{
+  let alive=true;
+  setState("loading");
+  (async()=>{
+   try{
+    const s=await getDoc(doc(profileDb,"profiles",uname,"ad","code"));
+    const h=s.exists()?s.data().html:"";
+    if(!alive)return;
+    if(typeof h==="string"&&h.trim()){setHtml(h);setState("ready");}
+    else setState("missing");
+   }catch{
+    if(alive)setState("retry"); // permission denied, offline, etc.
+   }
+  })();
+  return ()=>{alive=false};
+ },[uname,tries]);
+
+ return <main className="spts-ad">
+  <header className="spts-ad-bar">
+   <a className="spts-ghost spts-link-btn" href={`/profile/${uname}`}>← @{uname}</a>
+  </header>
+  {state==="loading"&&<div className="spts-public-status"><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Loading ad…</p></div>}
+  {state==="missing"&&<div className="spts-public-status"><h1>Ad not found</h1><p className="spts-muted">@{uname} has no ad live right now.</p></div>}
+  {state==="retry"&&<div className="spts-public-status"><h1>Couldn't load the ad</h1><p className="spts-muted">Access was denied or the connection failed. Please try again.</p><button type="button" onClick={()=>setTries(t=>t+1)}>Try again</button></div>}
+  {state==="ready"&&<iframe
+   className="spts-ad-frame"
+   title={`Ad by @${uname}`}
+   srcDoc={html}
+   sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+   referrerPolicy="no-referrer"
+  />}
+ </main>;
+}
+
+/* ------------------------------------------------------------------ *
  * Root
  * ------------------------------------------------------------------ */
-export default function ProfileNetwork({username}:{username?:string}){
+export default function ProfileNetwork({username,view}:{username?:string;view?:"ad"}){
  const [user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(true);
  useEffect(()=>onAuthStateChanged(profileAuth,u=>{setUser(u);setLoading(false)}),[]);
  useEffect(()=>{
@@ -951,6 +1057,10 @@ export default function ProfileNetwork({username}:{username?:string}){
   const id=setInterval(runTTLSweep,5*60*1000);
   return ()=>clearInterval(id);
  },[]);
+ // /profile/{username}/ad — pass view="ad" from your router, or let the path match below handle it.
+ const adMatch=/^\/profile\/([^/]+)\/ad\/?$/.exec(typeof location!=="undefined"?location.pathname:"");
+ const adUser=view==="ad"?username:adMatch?decodeURIComponent(adMatch[1]):undefined;
+ if(adUser)return <AdView username={adUser}/>;
  if(loading)return <main className="spts-page">Loading…</main>;
  return <ToastHost><ConfirmHost><ActiveVideoHost>
   {username==="upgradesuccessConfirm"?<UpgradeSuccess user={user}/>

@@ -358,3 +358,12 @@ video.spts-media-el{cursor:pointer;}
 .spts-public.spts-premium .spts-messagebox .spts-message{
  background:rgba(255,197,92,0.06);border-color:rgba(255,197,92,0.2);
 }
+
+/* Ads */
+.spts-profile-hero-actions .spts-ad-btn{background:var(--cyan);color:#06060f;border-color:var(--cyan);font-weight:600;}
+.spts-card input[type="date"]{color-scheme:dark;}
+.spts-card p a{color:var(--cyan);}
+.spts-ad{max-width:none;margin:0;padding:0;color:var(--ink);display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;}
+.spts-ad-bar{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);}
+.spts-ad-bar .spts-link-btn{display:inline-flex;align-items:center;padding:8px 12px;border-radius:9px;font-size:0.85rem;text-decoration:none;}
+.spts-ad-frame{flex:1;width:100%;border:0;background:#fff;min-height:0;}
