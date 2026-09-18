@@ -92,8 +92,104 @@
  * ------------------------------------------------------------------ */
 .spts-spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;margin-right:6px;vertical-align:-2px;animation:spts-spin .7s linear infinite;}
 @keyframes spts-spin{to{transform:rotate(360deg);}}
+.spts-spinner-lg{width:28px;height:28px;border-width:3px;color:var(--cyan);margin:0 0 14px;}
 
 /* ------------------------------------------------------------------ *
  * Empty state
  * ------------------------------------------------------------------ */
 .spts-empty{display:grid;gap:10px;justify-items:start;padding:8px 0;}
+
+/* ==================================================================== *
+ * Public profile page — professional presentation layer
+ * Scoped to .spts-public so the dashboard (.spts-page) is untouched.
+ * ==================================================================== */
+.spts-public{max-width:640px;padding:48px 18px 64px;}
+
+/* Loading / not-found states */
+.spts-public-status{min-height:40vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding:40px 0;}
+.spts-public-status h1{color:var(--white);font-size:1.4rem;}
+
+/* Hero */
+.spts-profile-hero{
+ display:flex;flex-direction:column;align-items:center;text-align:center;
+ padding:36px 24px 30px;margin-bottom:20px;border-radius:20px;
+ background:radial-gradient(120% 140% at 50% -20%,rgba(34,211,238,0.09),transparent 60%),rgba(255,255,255,0.02);
+ border:1px solid var(--line);
+}
+.spts-avatar-lg{
+ width:132px;height:132px;border-radius:50%;object-fit:cover;
+ border:3px solid var(--bg);
+ box-shadow:0 0 0 2px var(--cyan),0 0 32px rgba(34,211,238,0.25);
+ margin-bottom:18px;background:var(--faintest);
+}
+.spts-avatar-fallback{
+ display:flex;align-items:center;justify-content:center;
+ font-size:3rem;font-weight:700;color:var(--white);
+ background:linear-gradient(140deg,var(--violet),var(--cyan));
+}
+.spts-profile-name{color:var(--white);font-size:1.75rem;font-weight:700;letter-spacing:-0.01em;line-height:1.2;}
+.spts-profile-handle{color:var(--cyan);font-size:0.9rem;letter-spacing:0.02em;margin-top:2px;}
+.spts-profile-bio{max-width:480px;margin:16px 0 0;color:var(--ink);font-size:0.95rem;}
+.spts-profile-meta{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:18px;}
+.spts-meta-chip{
+ display:inline-flex;align-items:center;gap:6px;
+ padding:6px 14px;border-radius:999px;
+ border:1px solid var(--line);background:rgba(255,255,255,0.02);
+ color:var(--ink);font-size:0.8rem;text-decoration:none;
+ transition:border-color .15s ease,color .15s ease;
+}
+.spts-meta-chip:hover{border-color:var(--cyan);color:var(--cyan);}
+.spts-profile-hero-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:22px;}
+.spts-profile-hero-actions .spts-link-btn{
+ display:inline-flex;align-items:center;padding:10px 14px;border-radius:9px;
+ border:1px solid var(--line);color:var(--muted);font-size:0.85rem;text-decoration:none;
+}
+.spts-contact-note{display:block;margin-top:16px;font-size:0.72rem;opacity:0.75;}
+
+/* Sections */
+.spts-section{scroll-margin-top:24px;}
+.spts-empty-text{padding:10px 0;}
+
+/* Post grid inside the public page — turns the plain post list into cards */
+.spts-post-grid{display:grid;gap:18px;margin-top:4px;}
+.spts-post-grid .spts-post{
+ border-top:0;padding:0;border:1px solid var(--line);border-radius:14px;
+ background:rgba(255,255,255,0.015);overflow:hidden;
+}
+.spts-post-grid .spts-post img,.spts-post-grid .spts-post video{
+ max-height:520px;border-radius:0;display:block;width:100%;
+}
+.spts-post-grid .spts-post > p{padding:12px 16px 0;}
+.spts-post-grid .spts-post-actions{padding:0 16px;}
+.spts-post-grid .spts-comments{padding:0 16px 16px;}
+
+/* See more / show less */
+.spts-see-more{
+ display:block;width:100%;margin-top:14px;padding:11px 14px;
+ background:transparent;color:var(--cyan);
+ border:1px dashed var(--line);border-radius:10px;
+ font-weight:500;font-size:0.85rem;letter-spacing:0.01em;
+}
+.spts-see-more:hover{border-color:var(--cyan);}
+.spts-see-more.spts-ghost{color:var(--muted)!important;border-style:solid!important;}
+
+/* Error box (public-facing) */
+.spts-error-box{
+ display:flex;align-items:flex-start;gap:10px;
+ margin-top:12px;padding:10px 12px;border-radius:10px;
+ background:rgba(255,107,129,0.08);border:1px solid rgba(255,107,129,0.35);
+ color:#ff6b81;font-size:0.85rem;line-height:1.4;
+}
+.spts-error-icon{
+ flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+ width:18px;height:18px;border-radius:50%;background:#ff6b81;color:#06060f;
+ font-weight:800;font-size:0.7rem;
+}
+
+/* Small screens */
+@media (max-width:480px){
+ .spts-public{padding:28px 14px 48px;}
+ .spts-profile-hero{padding:28px 16px 24px;border-radius:16px;}
+ .spts-avatar-lg{width:104px;height:104px;}
+ .spts-profile-name{font-size:1.4rem;}
+}
