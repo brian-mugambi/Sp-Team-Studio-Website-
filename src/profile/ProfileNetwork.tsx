@@ -342,10 +342,11 @@ function ReplyThread({
 /* ------------------------------------------------------------------ *
  * ConversationThread
  * ------------------------------------------------------------------ */
-function ConversationThread({conversationId,visitorId,viewerRole="owner"}:{conversationId:string;visitorId:string;viewerRole?:"owner"|"visitor"}){
+function ConversationThread({conversationId,visitorId,viewerRole="owner",previewCount}:{conversationId:string;visitorId:string;viewerRole?:"owner"|"visitor";previewCount?:number}){
  const [messages,setMessages]=useState<any[]>([]),[decrypted,setDecrypted]=useState<Record<string,string>>({}),[loading,setLoading]=useState(true),[err,setErr]=useState("");
  const [openReplies,setOpenReplies]=useState<Record<string,boolean>>({});
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
+ const [showAllMessages,setShowAllMessages]=useState(!previewCount);
  const confirm=useConfirm();const toast=useToast();
 
  useEffect(()=>{
@@ -375,12 +376,15 @@ setMessages(docs);setLoading(false);
   finally{setPendingDeleteId(null);}
  }
 
+ const shownMessages=(!previewCount||showAllMessages)?messages:messages.slice(Math.max(0,messages.length-previewCount));
+ const hiddenCount=messages.length-shownMessages.length;
  return <div className="spts-conversation">
   <div className="spts-conversation-head">Visitor {visitorId.slice(0,8)}</div>
   {loading&&<p className="spts-muted">Loading…</p>}
   {err&&<p className="spts-error">{err}</p>}
   {!loading&&messages.length===0&&<p className="spts-muted">No messages in this conversation.</p>}
-  {messages.map(m=><div className="spts-message" key={m.id}>
+  {previewCount&&hiddenCount>0&&<button type="button" className="spts-see-more" onClick={()=>setShowAllMessages(true)}>See {hiddenCount} earlier message{hiddenCount===1?"":"s"}</button>}
+  {shownMessages.map(m=><div className="spts-message" key={m.id}>
    <p><LinkText text={decrypted[m.id]??"…"}/></p>
    <div className="spts-message-actions">
     <SpinnerButton className="spts-ghost" busy={pendingDeleteId===m.id} busyLabel="Deleting…" onClick={()=>deleteMessage(m.id)}>Delete</SpinnerButton>
@@ -395,6 +399,7 @@ setMessages(docs);setLoading(false);
 canReply
    />}
   </div>)}
+  {previewCount&&showAllMessages&&messages.length>previewCount&&<button type="button" className="spts-see-more spts-ghost" onClick={()=>setShowAllMessages(false)}>Show less</button>}
  </div>;
 }
 
@@ -568,10 +573,13 @@ function Dashboard({user}:{user:User}){
 /* ------------------------------------------------------------------ *
  * PublicProfile
  * ------------------------------------------------------------------ */
+const POST_PREVIEW_COUNT=3;
 function PublicProfile({username,user}:{username:string;user:User|null}){
  const [p,setP]=useState<any>(null),[posts,setPosts]=useState<any[]>([]),[msg,setMsg]=useState(""),[err,setErr]=useState(""),[count,setCount]=useState(0),[notFound,setNotFound]=useState(false);
  const [sending,setSending]=useState(false);
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
+ const [showAllPosts,setShowAllPosts]=useState(false);
+ const [copied,setCopied]=useState(false);
  const confirm=useConfirm();const toast=useToast();
 
  useEffect(()=>{(async()=>{try{
@@ -612,15 +620,61 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   catch(x:any){toast("error",x.message||"Unable to delete post");}
   finally{setPendingDeleteId(null);}
  }
- if(notFound)return <main className="spts-page"><h1>Profile not found</h1><a href="/profiles">Get your own profile</a></main>;
- if(!p)return <main className="spts-page"><p className="spts-muted">Loading…</p></main>;
+ if(notFound)return <main className="spts-public"><div className="spts-public-status"><h1>Profile not found</h1><p className="spts-muted">This username doesn't have a public profile.</p><a className="spts-ghost spts-link-btn" href="/profiles">Get your own profile</a></div></main>;
+ if(!p)return <main className="spts-public"><div className="spts-public-status"><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Loading profile…</p></div></main>;
  const contacts=detectContacts(p.bio||"");
  const canDeletePosts=!!user&&user.uid===p.uid;
-  return <main className="spts-public"><header><div>{p.photoUrl&&<img className="spts-avatar" src={p.photoUrl} alt=""/>}<h1>{p.displayName}</h1><p>@{p.username}</p></div><a href="/profiles">Get your own profile</a></header>
- <section className="spts-card"><p className="spts-bio"><LinkText text={p.bio||""}/></p>{p.websiteUrl&&<p>🌐 <a href={p.websiteUrl} target="_blank" rel="noreferrer">{p.websiteUrl}</a></p>}{p.email&&<p>✉️ <a href={`mailto:${p.email}`}>{p.email}</a></p>}{p.phone&&<p>📞 <a href={`tel:${p.phone}`}>{p.phone}</a></p>}<small className="spts-muted">{contacts.urls.length+contacts.emails.length+contacts.phones.length} contact/link items detected</small><br/><button className="spts-ghost" onClick={()=>navigator.clipboard?.writeText(location.href)}>Share profile</button></section>
- <section className="spts-card"><h2>Posts</h2>{posts.length===0&&<p className="spts-muted">No posts yet.</p>}{posts.map(x=><PostCard key={x.id} post={x} user={user} canDeletePost={canDeletePosts} onDeletePost={()=>deletePost(x.id)}/>)}</section>
- <section className="spts-card"><h2>Message anonymously</h2><p className="spts-muted">{MIN_MESSAGE}-{MAX_MESSAGE} characters · {MAX_MESSAGES} messages/replies per conversation</p><textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Anonymous message" disabled={sending}/><SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>{err&&<p className="spts-error">{err}</p>}</section>
- <section className="spts-card"><h2>Your conversation</h2><p className="spts-muted">Replies from {p.displayName} will appear here.</p><ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()} viewerRole="visitor"/></section></main>
+ const visiblePosts=showAllPosts?posts:posts.slice(0,POST_PREVIEW_COUNT);
+ const hiddenPostCount=posts.length-visiblePosts.length;
+ function shareProfile(){
+  navigator.clipboard?.writeText(location.href);
+  setCopied(true);
+  setTimeout(()=>setCopied(false),2000);
+ }
+ return <main className="spts-public">
+
+ <section className="spts-profile-hero">
+  {p.photoUrl?<img className="spts-avatar-lg" src={p.photoUrl} alt={p.displayName}/>:<div className="spts-avatar-lg spts-avatar-fallback" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
+  <h1 className="spts-profile-name">{p.displayName}</h1>
+  <p className="spts-profile-handle">@{p.username}</p>
+  {p.bio&&<p className="spts-bio spts-profile-bio"><LinkText text={p.bio}/></p>}
+  {(p.websiteUrl||p.email||p.phone)&&<div className="spts-profile-meta">
+   {p.websiteUrl&&<a className="spts-meta-chip" href={p.websiteUrl} target="_blank" rel="noreferrer">🌐 Website</a>}
+   {p.email&&<a className="spts-meta-chip" href={`mailto:${p.email}`}>✉️ Email</a>}
+   {p.phone&&<a className="spts-meta-chip" href={`tel:${p.phone}`}>📞 Phone</a>}
+  </div>}
+  <div className="spts-profile-hero-actions">
+   <button type="button" className="spts-ghost" onClick={shareProfile}>{copied?"✓ Link copied":"Share profile"}</button>
+   <a className="spts-ghost spts-link-btn" href="/profiles">Get your own profile</a>
+  </div>
+  <small className="spts-muted spts-contact-note">{contacts.urls.length+contacts.emails.length+contacts.phones.length} contact/link items detected in bio</small>
+ </section>
+
+ <section className="spts-card spts-section">
+  <div className="spts-card-head"><h2>Posts</h2><span className="spts-badge">{posts.length}</span></div>
+  {posts.length===0&&<p className="spts-muted spts-empty-text">No posts yet.</p>}
+  <div className="spts-post-grid">
+   {visiblePosts.map(x=><PostCard key={x.id} post={x} user={user} canDeletePost={canDeletePosts} onDeletePost={()=>deletePost(x.id)}/>)}
+  </div>
+  {!showAllPosts&&hiddenPostCount>0&&<button type="button" className="spts-see-more" onClick={()=>setShowAllPosts(true)}>See {hiddenPostCount} more post{hiddenPostCount===1?"":"s"}</button>}
+  {showAllPosts&&posts.length>POST_PREVIEW_COUNT&&<button type="button" className="spts-see-more spts-ghost" onClick={()=>setShowAllPosts(false)}>Show less</button>}
+ </section>
+
+ <section className="spts-card spts-section">
+  <div className="spts-card-head"><h2>Message anonymously</h2></div>
+  <p className="spts-muted">{MIN_MESSAGE}-{MAX_MESSAGE} characters · {MAX_MESSAGES} messages/replies per conversation</p>
+  <textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Anonymous message" disabled={sending}/>
+  <SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>
+  {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{err}</span></div>}
+ </section>
+
+ <section className="spts-card spts-section">
+  <div className="spts-card-head"><h2>Your conversation</h2></div>
+  <p className="spts-muted">Replies from {p.displayName} will appear here.</p>
+  <ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()} viewerRole="visitor" previewCount={3}/>
+ </section>
+
+ </main>
 }
 /* ------------------------------------------------------------------ *
  * Root
