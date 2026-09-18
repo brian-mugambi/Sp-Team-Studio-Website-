@@ -92,12 +92,12 @@ function ConfirmHost({children}:{children?:React.ReactNode}){
 // A button that shows a spinner while an async action is in flight and
 // disables itself so it can't be double-clicked.
 function SpinnerButton({
- children,busy,busyLabel,className,type="button",disabled,onClick,
+ children,busy,busyLabel,className,type="button",disabled,onClick,title,
 }:{
  children:React.ReactNode;busy:boolean;busyLabel?:string;className?:string;
- type?:"button"|"submit";disabled?:boolean;onClick?:()=>void;
+ type?:"button"|"submit";disabled?:boolean;onClick?:()=>void;title?:string;
 }){
- return <button type={type} className={className} disabled={disabled||busy} onClick={onClick}>
+ return <button type={type} className={className} disabled={disabled||busy} onClick={onClick} title={title}>
   {busy&&<span className="spts-spinner" aria-hidden="true"/>}
   {busy?(busyLabel??"Working…"):children}
  </button>;
@@ -112,6 +112,18 @@ const LinkText=({text}:{text:string})=><>{text.split(/(https?:\/\/[^\s]+|[A-Z0-9
  if(/^\+?\d[\d\s().-]{7,}\d$/.test(x))return <a key={i} href={`tel:${x.replace(/[^\d+]/g,"")}`}>{x}</a>;
  return <React.Fragment key={i}>{x}</React.Fragment>;
 })}</>;
+
+/* ------------------------------------------------------------------ *
+ * Auto-delete warnings — shown wherever content is created, so
+ * everyone understands the 24h deletion depends on this device.
+ * ------------------------------------------------------------------ */
+const TTL_DEVICE_CAVEAT="Only works if you come back on this same browser/device — using a different device, or clearing your browser data, may stop it from being deleted.";
+function AutoDeleteNotice({text}:{text:string}){
+ return <p className="spts-ttl-notice"><span aria-hidden="true">⏳</span> {text} {TTL_DEVICE_CAVEAT}</p>;
+}
+function AutoDeleteNoticeSm({text}:{text:string}){
+ return <small className="spts-ttl-notice-sm">⏳ {text} Depends on this browser/device — a different device or cleared data may stop it.</small>;
+}
 
 /* ------------------------------------------------------------------ *
  * Cascades — unchanged, just relocated
@@ -132,6 +144,56 @@ async function cascadeMessage(conversationId:string,messageId:string){
   limit(500)
  ));
  r.forEach(x=>b.delete(x.ref)); await b.commit();
+}
+
+/* ------------------------------------------------------------------ *
+ * 24h auto-delete queue (device-local, no backend TTL)
+ * When something is created, an entry with a delete-at time is saved
+ * to localStorage. Whenever the app loads (or every few minutes while
+ * it's open) on that same browser/device, due entries are removed
+ * from the queue and deleted with the exact same calls the manual
+ * delete buttons use (cascadePost/cascadeMessage/deleteDoc) — so an
+ * automatic delete looks identical to the user having clicked delete
+ * themselves. If this device never comes back, the queue entry (and
+ * the data) just stays put — no server-side component.
+ * ------------------------------------------------------------------ */
+const TTL_STORAGE_KEY="spts_ttl_queue";
+const TTL_MS=24*60*60*1000;
+type TTLEntry=
+ |{kind:"post";postId:string;deleteAt:number}
+ |{kind:"comment";postId:string;commentId:string;deleteAt:number}
+ |{kind:"like";postId:string;uid:string;deleteAt:number}
+ |{kind:"conversation";conversationId:string;deleteAt:number}
+ |{kind:"message";conversationId:string;messageId:string;deleteAt:number}
+ |{kind:"reply";conversationId:string;messageId:string;replyId:string;deleteAt:number};
+
+function readTTLQueue():TTLEntry[]{
+ try{ return JSON.parse(localStorage.getItem(TTL_STORAGE_KEY)||"[]"); }catch{ return []; }
+}
+function writeTTLQueue(q:TTLEntry[]){
+ try{ localStorage.setItem(TTL_STORAGE_KEY,JSON.stringify(q)); }catch{}
+}
+function scheduleAutoDelete(entry:TTLEntry|Omit<TTLEntry,"deleteAt">){
+ const withTime="deleteAt" in entry?entry as TTLEntry:{...entry,deleteAt:Date.now()+TTL_MS} as TTLEntry;
+ writeTTLQueue([...readTTLQueue(),withTime]);
+}
+async function runTTLSweep(){
+ const q=readTTLQueue();
+ if(q.length===0)return;
+ const now=Date.now();
+ const due=q.filter(e=>e.deleteAt<=now);
+ if(due.length===0)return;
+ writeTTLQueue(q.filter(e=>e.deleteAt>now));
+ for(const e of due){
+  try{
+   if(e.kind==="post")await cascadePost(e.postId);
+   else if(e.kind==="comment")await deleteDoc(doc(profileDb,"posts",e.postId,"comments",e.commentId));
+   else if(e.kind==="like")await deleteDoc(doc(profileDb,"posts",e.postId,"likes",e.uid));
+   else if(e.kind==="conversation")await deleteDoc(doc(profileDb,"conversations",e.conversationId));
+   else if(e.kind==="message")await cascadeMessage(e.conversationId,e.messageId);
+   else if(e.kind==="reply")await deleteDoc(doc(profileDb,"conversations",e.conversationId,"messages",e.messageId,"replies",e.replyId));
+  }catch{ /* best-effort: same as if the user had tried to delete and it failed */ }
+ }
 }
 
 /* ------------------------------------------------------------------ *
@@ -179,7 +241,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   if(!user)return setErr("Log in to like posts.");
   setErr("");setLikeBusy(true);
   const ref=doc(profileDb,"posts",post.id,"likes",user.uid);
-  try{ liked?await deleteDoc(ref):await setDoc(ref,{createdAt:serverTimestamp()}); }
+  try{ liked?await deleteDoc(ref):await setDoc(ref,{createdAt:serverTimestamp()}); if(!liked)scheduleAutoDelete({kind:"like",postId:post.id,uid:user.uid}); }
   catch(x:any){setErr(x.message||"Unable to update like");toast("error",x.message||"Unable to update like");}
   finally{setLikeBusy(false);}
  }
@@ -190,7 +252,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   const text=commentText.trim();
   if(!text)return;
   setErr("");setCommentBusy(true);
-  try{ await addDoc(collection(profileDb,"posts",post.id,"comments"),{ownerId:user.uid,text,createdAt:serverTimestamp()}); setCommentText(""); }
+  try{ const ref=await addDoc(collection(profileDb,"posts",post.id,"comments"),{ownerId:user.uid,text,createdAt:serverTimestamp()}); scheduleAutoDelete({kind:"comment",postId:post.id,commentId:ref.id}); setCommentText(""); toast("success","Comment added — it auto-deletes in 24h on this device."); }
   catch(x:any){setErr(x.message||"Unable to post comment");toast("error",x.message||"Unable to post comment");}
   finally{setCommentBusy(false);}
  }
@@ -226,7 +288,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   {post.mediaType==="video"?<video src={post.mediaUrl} controls/>:<img src={post.mediaUrl} alt={post.caption}/>}
   <p><LinkText text={post.caption}/></p>
   <div className="spts-post-actions">
-   <SpinnerButton busy={likeBusy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike}>
+   <SpinnerButton busy={likeBusy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike} title="Likes auto-delete after 24h on this device">
     {liked?"♥":"♡"} {likeCount}
    </SpinnerButton>
    {canDeletePost&&<SpinnerButton className="spts-ghost" busy={deleteBusy} busyLabel="Deleting…" onClick={handleDeletePost}>Delete post</SpinnerButton>}
@@ -241,6 +303,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
     <input maxLength={300} placeholder={user?"Add a comment":"Log in to comment"} value={commentText} onChange={e=>setCommentText(e.target.value)} disabled={!user||commentBusy}/>
     <SpinnerButton type="submit" busy={commentBusy} busyLabel="Posting…" disabled={!user||!commentText.trim()}>Comment</SpinnerButton>
    </form>
+   {user&&<AutoDeleteNoticeSm text="Comments auto-delete after 24h."/>}
   </div>
   {err&&<p className="spts-error">{err}</p>}
  </article>;
@@ -289,7 +352,7 @@ function ReplyThread({
   setSending(true);setErr("");
   try{
    const e2=await encryptMessage(t);
-   await addDoc(
+   const replyRef=await addDoc(
     collection(profileDb,"conversations",conversationId,"messages",messageId,"replies"),
     {
      senderId:viewerRole==="owner"?"owner":e2.deviceId,
@@ -298,7 +361,8 @@ function ReplyThread({
      createdAt:serverTimestamp(),
     }
    );
-   setText("");toast("success","Reply sent.");
+   scheduleAutoDelete({kind:"reply",conversationId,messageId,replyId:replyRef.id});
+   setText("");toast("success","Reply sent — it auto-deletes in 24h on this device.");
   }catch(x:any){ setErr(x.message||"Unable to send reply");toast("error",x.message||"Unable to send reply"); }
   finally{ setSending(false); }
  }
@@ -335,6 +399,7 @@ function ReplyThread({
    />
    <SpinnerButton type="submit" busy={sending} busyLabel="Sending…" disabled={!text.trim()}>Reply</SpinnerButton>
   </form>}
+  {canReply&&<AutoDeleteNoticeSm text="Replies auto-delete after 24h."/>}
   {err&&<p className="spts-error">{err}</p>}
  </div>;
 }
@@ -414,6 +479,7 @@ function Messages({user}:{user:User}){
  },[user.uid]);
  return <section className="spts-card">
   <div className="spts-card-head"><h2>Inbox</h2><span className="spts-badge">{conversations.length}</span></div>
+  <AutoDeleteNotice text="Messages and replies auto-delete 24h after they're sent."/>
   {loading&&<p className="spts-muted">Loading messages…</p>}
   {err&&<p className="spts-error">Couldn't load messages: {err}</p>}
   {!loading&&!err&&conversations.length===0&&<p className="spts-muted">No messages yet. Anyone who visits your public profile can send you one.</p>}
@@ -479,8 +545,9 @@ function Dashboard({user}:{user:User}){
   if(!validMediaUrl(url)){setErr("Use a valid media URL.");return;}
   setErr("");setAddingPost(true);
   try{
-   await addDoc(collection(profileDb,"posts"),{ownerId:user.uid,mediaUrl:url.trim(),mediaType:mediaTypeFromUrl(url),caption:caption.trim(),createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
-   setUrl("");setCaption("");toast("success","Post added.");
+   const postRef=await addDoc(collection(profileDb,"posts"),{ownerId:user.uid,mediaUrl:url.trim(),mediaType:mediaTypeFromUrl(url),caption:caption.trim(),createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+   scheduleAutoDelete({kind:"post",postId:postRef.id});
+   setUrl("");setCaption("");toast("success","Post added — it auto-deletes in 24h on this device.");
   }catch(x:any){setErr(x.message||"Unable to add post");toast("error",x.message||"Unable to add post");}
   finally{setAddingPost(false);}
  }
@@ -557,6 +624,7 @@ function Dashboard({user}:{user:User}){
  <section className="spts-card">
   <div className="spts-card-head"><h2>Posts</h2><span className="spts-badge">{posts.length}/{MAX_POSTS}</span></div>
   <p className="spts-muted">URLs only — no uploads.</p>
+  <AutoDeleteNotice text="Posts (and their likes and comments) auto-delete 24h after you add them."/>
   <form onSubmit={add}>
    <label>Photo/video URL<input required placeholder="https://…" value={url} onChange={e=>setUrl(e.target.value)} disabled={addingPost}/></label>
    <label>Caption<input maxLength={500} placeholder="Optional caption" value={caption} onChange={e=>setCaption(e.target.value)} disabled={addingPost}/></label>
@@ -601,9 +669,12 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
     s=await getDoc(cr),n=s.exists()?s.data().messageCount||0:0;
    if(n>=MAX_MESSAGES){setErr("Conversation limit reached.");return;}
    const e=await encryptMessage(msg.trim());
-   await setDoc(cr,{profileOwnerId:p.uid,visitorId:visitor,messageCount:increment(1),createdAt:s.exists()?s.data().createdAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
-   await addDoc(collection(cr,"messages"),{senderId:visitor,ciphertext:e.ciphertext,time:e.time,deviceId:e.deviceId,iv:e.iv,createdAt:serverTimestamp()});
-   setMsg("");setCount(count+1);toast("success","Message sent.");
+   const isNewConversation=!s.exists();
+   await setDoc(cr,{profileOwnerId:p.uid,visitorId:visitor,messageCount:increment(1),createdAt:isNewConversation?serverTimestamp():s.data().createdAt,updatedAt:serverTimestamp()},{merge:true});
+   if(isNewConversation)scheduleAutoDelete({kind:"conversation",conversationId:cid});
+   const messageRef=await addDoc(collection(cr,"messages"),{senderId:visitor,ciphertext:e.ciphertext,time:e.time,deviceId:e.deviceId,iv:e.iv,createdAt:serverTimestamp()});
+   scheduleAutoDelete({kind:"message",conversationId:cid,messageId:messageRef.id});
+   setMsg("");setCount(count+1);toast("success","Message sent — it auto-deletes in 24h on this device.");
   }catch(x:any){setErr(x.message||"Unable to send");toast("error",x.message||"Unable to send");}
   finally{setSending(false);}
  }
@@ -663,6 +734,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  <section className="spts-card spts-section">
   <div className="spts-card-head"><h2>Message anonymously</h2></div>
   <p className="spts-muted">{MIN_MESSAGE}-{MAX_MESSAGE} characters · {MAX_MESSAGES} messages/replies per conversation</p>
+  <AutoDeleteNotice text="Your message (and any replies) auto-delete 24h after they're sent."/>
   <textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Anonymous message" disabled={sending}/>
   <SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>
   {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{err}</span></div>}
@@ -682,6 +754,11 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
 export default function ProfileNetwork({username}:{username?:string}){
  const [user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(true);
  useEffect(()=>onAuthStateChanged(profileAuth,u=>{setUser(u);setLoading(false)}),[]);
+ useEffect(()=>{
+  runTTLSweep();
+  const id=setInterval(runTTLSweep,5*60*1000);
+  return ()=>clearInterval(id);
+ },[]);
  if(loading)return <main className="spts-page">Loading…</main>;
  return <ToastHost><ConfirmHost>
   {username?<PublicProfile username={username} user={user}/>:user?<Dashboard user={user}/>:<main className="spts-page"><Auth done={()=>{}}/></main>}

@@ -186,6 +186,19 @@
  font-weight:800;font-size:0.7rem;
 }
 
+/* Auto-delete (24h TTL) notices — friendly amber warning tone,
+ * distinct from the red error style above. */
+.spts-ttl-notice{
+ display:flex;align-items:flex-start;gap:6px;
+ margin:8px 0;padding:8px 12px;border-radius:9px;
+ background:rgba(255,184,92,0.08);border:1px solid rgba(255,184,92,0.3);
+ color:#ffb85c;font-size:0.76rem;line-height:1.5;
+}
+.spts-ttl-notice-sm{
+ display:block;margin:4px 0 2px;
+ color:#ffb85c;opacity:0.85;font-size:0.7rem;line-height:1.4;
+}
+
 /* Small screens */
 @media (max-width:480px){
  .spts-public{padding:28px 14px 48px;}
