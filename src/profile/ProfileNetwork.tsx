@@ -692,10 +692,95 @@ setMessages(docs);setLoading(false);
     conversationId={conversationId}
     messageId={m.id}
     viewerRole={viewerRole}
-canReply
+    canReply={viewerRole==="owner"}
    />}
   </div>)}
   {previewCount&&showAllMessages&&messages.length>previewCount&&<button type="button" className="spts-see-more spts-ghost" onClick={()=>setShowAllMessages(false)}>Show less</button>}
+ </div>;
+}
+
+/* ------------------------------------------------------------------ *
+ * VisitorChat — the public-profile message box, laid out like a chat:
+ * message 1 → reply 1 → message 2 → reply 2 …  Visitors only send messages;
+ * replies come from the profile owner (from their dashboard inbox).
+ * ------------------------------------------------------------------ */
+function fmtTime(ts:any){
+ try{const d=ts?.toDate?.();return d?d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"";}catch{return "";}
+}
+
+function ChatExchange({conversationId,message,text,deleting,onDelete,onUpdate}:{conversationId:string;message:any;text?:string;deleting:boolean;onDelete:()=>void;onUpdate:()=>void}){
+ const [replies,setReplies]=useState<any[]>([]),[dec,setDec]=useState<Record<string,string>>({});
+
+ useEffect(()=>onSnapshot(
+  query(collection(profileDb,"conversations",conversationId,"messages",message.id,"replies"),orderBy("createdAt","asc"),limit(MAX_REPLIES_PER_MESSAGE)),
+  async s=>{
+   const docs:any[]=s.docs.map(d=>({id:d.id,...d.data()}));
+   const out:Record<string,string>={};
+   await Promise.all(docs.map(async r=>{
+    try{ out[r.id]=await decryptMessage(r.ciphertext,r.time,r.deviceId,r.iv); }
+    catch{ out[r.id]="[unable to decrypt]"; }
+   }));
+   setReplies(docs);setDec(out);onUpdate();
+  },()=>{}),[conversationId,message.id]);
+
+ return <div className="spts-chat-exchange">
+  <div className="spts-chat-row spts-chat-me">
+   <div className="spts-chat-bubble"><LinkText text={text??"…"}/></div>
+   <div className="spts-chat-meta">
+    <span>{fmtTime(message.createdAt)}</span>
+    <button type="button" className="spts-chat-del" disabled={deleting} onClick={onDelete}>{deleting?"Deleting…":"Delete"}</button>
+   </div>
+  </div>
+  {replies.map(r=><div key={r.id} className={`spts-chat-row ${r.role==="owner"?"spts-chat-them":"spts-chat-me"}`}>
+   <div className="spts-chat-bubble"><LinkText text={dec[r.id]??"…"}/></div>
+   <div className="spts-chat-meta"><span>{fmtTime(r.createdAt)}</span></div>
+  </div>)}
+ </div>;
+}
+
+function VisitorChat({conversationId}:{conversationId:string}){
+ const [messages,setMessages]=useState<any[]>([]),[dec,setDec]=useState<Record<string,string>>({}),[loading,setLoading]=useState(true),[err,setErr]=useState("");
+ const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
+ const [tick,setTick]=useState(0);
+ const boxRef=useRef<HTMLDivElement>(null);
+ const confirm=useConfirm();const toast=useToast();
+
+ useEffect(()=>{
+  const q=query(collection(profileDb,"conversations",conversationId,"messages"),orderBy("createdAt","asc"),limit(MAX_MESSAGES*2));
+  return onSnapshot(q,async s=>{
+   const docs:any[]=s.docs.map(d=>({id:d.id,...d.data()}));
+   setMessages(docs);setLoading(false);
+   const out:Record<string,string>={};
+   await Promise.all(docs.map(async m=>{
+    try{ out[m.id]=await decryptMessage(m.ciphertext,m.time,m.deviceId,m.iv); }
+    catch{ out[m.id]="[unable to decrypt]"; }
+   }));
+   setDec(out);
+  },e=>{setErr(e.message);setLoading(false)});
+ },[conversationId]);
+
+ // keep the newest message in view
+ useEffect(()=>{const el=boxRef.current;if(el)el.scrollTop=el.scrollHeight;},[messages.length,tick,dec]);
+
+ async function deleteMessage(messageId:string){
+  const ok=await confirm({
+   title:"Delete this message?",
+   body:<p className="spts-muted">This removes the message and its replies.</p>,
+   confirmLabel:"Delete message",danger:true,
+  });
+  if(!ok)return;
+  setPendingDeleteId(messageId);
+  try{ await cascadeMessage(conversationId,messageId);toast("success","Message deleted."); }
+  catch(x:any){setErr(x.message||"Unable to delete message");toast("error",x.message||"Unable to delete message");}
+  finally{setPendingDeleteId(null);}
+ }
+
+ return <div className="spts-chat-thread" ref={boxRef}>
+  {loading&&<p className="spts-muted">Loading…</p>}
+  {err&&<p className="spts-error">{err}</p>}
+  {!loading&&!err&&messages.length===0&&<p className="spts-muted spts-chat-empty">No messages yet.</p>}
+  {messages.map(m=><ChatExchange key={m.id} conversationId={conversationId} message={m} text={dec[m.id]}
+   deleting={pendingDeleteId===m.id} onDelete={()=>deleteMessage(m.id)} onUpdate={()=>setTick(t=>t+1)}/>)}
  </div>;
 }
 
@@ -855,7 +940,7 @@ function Dashboard({user}:{user:User}){
    <div className="spts-card-head-badges">
     {!editing&&profile&&<span className="spts-badge">Live</span>}
     {isPremium&&<span className="spts-premium-tag">✦ Premium</span>}
-    {!isPremium&&profile&&<a className="spts-upgrade-btn" href={`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email||"")}`} target="_blank" rel="noreferrer">Upgrade to Premium</a>}
+    {!isPremium&&profile&&<UpgradeButton user={user}/>}
    </div>
   </div>
   {loadingProfile&&<p className="spts-muted">Loading…</p>}
@@ -960,7 +1045,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    if(isNewConversation)scheduleAutoDelete({kind:"conversation",conversationId:cid});
    const messageRef=await addDoc(collection(cr,"messages"),{senderId:visitor,ciphertext:e.ciphertext,time:e.time,deviceId:e.deviceId,iv:e.iv,createdAt:serverTimestamp()});
    scheduleAutoDelete({kind:"message",conversationId:cid,messageId:messageRef.id});
-   setMsg("");setCount(count+1);toast("success","Sent · auto-deletes in 24h.");
+   setMsg("");setCount(count+1);
   }catch(x:any){setErr(x.message||"Unable to send");toast("error",x.message||"Unable to send");}
   finally{setSending(false);}
  }
@@ -1004,9 +1089,9 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   <div className="spts-profile-hero-actions">
    <button type="button" aria-expanded={postsOpen} onClick={()=>setPostsOpen(o=>!o)}>{postsOpen?"Hide posts":"See posts"}</button>
    <button type="button" aria-expanded={msgOpen} onClick={()=>setMsgOpen(o=>!o)}>{msgOpen?"Close":"Message"}</button>
+   <a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`}>See portfolio</a>
   </div>
   <div className="spts-profile-hero-actions spts-hero-actions-2">
-   <a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`}>See portfolio</a>
    <button type="button" className="spts-ghost" onClick={shareProfile}>{copied?"✓ Link copied":"Share profile"}</button>
    <a className="spts-ghost spts-link-btn" href="/profiles">Get your own profile</a>
   </div>
@@ -1023,19 +1108,21 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    </section>
   </div>}
   {msgOpen&&<div className="spts-hero-panel">
-   <section className="spts-card spts-section spts-messagebox">
-    <div className="spts-card-head"><h2>Message</h2></div>
-    <p className="spts-muted">{MIN_MESSAGE}–{MAX_MESSAGE} chars · {MAX_MESSAGES} max</p>
-    <AutoDeleteNotice text="Auto-deletes in 24h."/>
-
-    <div className="spts-messagebox-thread">
-     <ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()} viewerRole="visitor" previewCount={3}/>
+   <section className="spts-card spts-section spts-chat">
+    <div className="spts-chat-head">
+     {p.photoUrl?<img className="spts-chat-avatar" src={p.photoUrl} alt=""/>:<div className="spts-chat-avatar" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
+     <div><strong>{p.displayName}</strong><small>Anonymous · auto-deletes in 24h</small></div>
     </div>
 
-    <div className="spts-messagebox-compose">
-     <textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Anonymous message…" disabled={sending}/>
-     <SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>
+    <VisitorChat conversationId={`${p.uid}_${getDeviceId()}`}/>
+
+    <div className="spts-chat-compose">
+     <textarea rows={1} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)}
+      onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();if(msg.trim()&&!sending)send();}}}
+      placeholder="Message…" disabled={sending}/>
+     <SpinnerButton className="spts-chat-send" busy={sending} busyLabel="" onClick={send} disabled={!msg.trim()} title="Send">➤</SpinnerButton>
     </div>
+    <div className="spts-chat-foot"><span>{MIN_MESSAGE}–{MAX_MESSAGE} chars</span><span>{msg.length}/{MAX_MESSAGE}</span></div>
     {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{err}</span></div>}
    </section>
   </div>}
@@ -1045,24 +1132,103 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
 }
 
 /* ------------------------------------------------------------------ *
- * UpgradeSuccess — landing spot for Paystack's redirect after a
- * successful payment ("…/profile/upgradesuccessConfirm"). No webhook
- * or signature check: it simply marks the signed-in user's profile as
- * premium in Firestore. Simple, as intended — just make sure this URL
- * is only reachable after Paystack's own successful-payment redirect.
+ * Premium upgrade handshake
+ *
+ * 1. Any "Upgrade to Premium" button first builds { username, HH:MM:SS, epoch ms },
+ *    encrypts it with a key derived from the signed-in email (AES-GCM), saves the blob
+ *    in Firestore (upgradeintents/{uid}), caches the same time on this device, and only
+ *    then sends the user to Paystack.
+ * 2. Paystack redirects to "…/profile/upgradesuccessConfirm". UpgradeSuccess reads the
+ *    blob back, decrypts it with the email, and checks it matches the username, matches
+ *    the time cached on this device, and is under 15 minutes old. Only then is premium set.
+ *
+ * Note: this proves the upgrade was started from this account and device just now — it does
+ * not prove Paystack received a payment (that needs a Paystack webhook / verify call).
+ * ------------------------------------------------------------------ */
+const UPGRADE_CACHE_KEY="spts_upgrade_v1:";
+const UPGRADE_TTL_MS=15*60*1000;
+type UpgradeRec={u:string;t:string;at:number};
+
+const _te=new TextEncoder(),_td=new TextDecoder();
+const _b64=(u:Uint8Array)=>btoa(String.fromCharCode(...u));
+const _unb64=(s:string)=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function emailKey(email:string){
+ const base=await crypto.subtle.importKey("raw",_te.encode(email.trim().toLowerCase()),"PBKDF2",false,["deriveKey"]);
+ return crypto.subtle.deriveKey(
+  {name:"PBKDF2",salt:_te.encode("spts-upgrade-v1"),iterations:100000,hash:"SHA-256"},
+  base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function sealUpgrade(email:string,rec:UpgradeRec){
+ const iv=crypto.getRandomValues(new Uint8Array(12));
+ const ct=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},await emailKey(email),_te.encode(JSON.stringify(rec))));
+ return `${_b64(iv)}.${_b64(ct)}`;
+}
+async function openUpgrade(email:string,blob:string):Promise<UpgradeRec>{
+ const [iv,ct]=blob.split(".");
+ const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:_unb64(iv)},await emailKey(email),_unb64(ct));
+ return JSON.parse(_td.decode(pt));
+}
+
+async function beginUpgrade(user:User){
+ if(!user.email)throw new Error("Your account has no email address.");
+ const us=await getDoc(doc(profileDb,"users",user.uid));
+ if(!us.exists())throw new Error("Create your public profile first, then upgrade.");
+ const d=new Date(),p=(n:number)=>String(n).padStart(2,"0");
+ const rec:UpgradeRec={u:us.data().username,t:`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,at:Date.now()};
+ const blob=await sealUpgrade(user.email,rec);
+ await setDoc(doc(profileDb,"upgradeintents",user.uid),{blob,createdAt:serverTimestamp()});
+ localStorage.setItem(UPGRADE_CACHE_KEY+user.uid,JSON.stringify(rec));
+ window.location.assign(`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email)}`);
+}
+
+// Every upgrade button in the app.
+function UpgradeButton({user,className}:{user:User;className?:string}){
+ const [busy,setBusy]=useState(false);
+ const toast=useToast();
+ async function go(){
+  setBusy(true);
+  try{ await beginUpgrade(user); } // navigates away on success
+  catch(x:any){ toast("error",x.message||"Couldn't start the upgrade. Please try again."); setBusy(false); }
+ }
+ return <SpinnerButton className={`spts-upgrade-btn${className?" "+className:""}`} busy={busy} busyLabel="Please wait…" onClick={go}>Upgrade to Premium</SpinnerButton>;
+}
+
+/* ------------------------------------------------------------------ *
+ * UpgradeSuccess — landing spot for Paystack's redirect after payment
+ * ("…/profile/upgradesuccessConfirm"). Verifies the handshake above.
  * ------------------------------------------------------------------ */
 function UpgradeSuccess({user}:{user:User|null}){
  const [status,setStatus]=useState<"working"|"done"|"error">("working");
  const [err,setErr]=useState("");
+ const ran=useRef(false);
  const toast=useToast();
 
  useEffect(()=>{(async()=>{
   if(!user){setStatus("error");setErr("Log in with the account you upgraded, then reopen this page.");return;}
+  if(ran.current)return;
+  ran.current=true;
   try{
+   if(!user.email)throw new Error("Your account has no email address.");
    const us=await getDoc(doc(profileDb,"users",user.uid));
-   if(!us.exists()){setStatus("error");setErr("Create your public profile first, then upgrade.");return;}
-   const uname=us.data().username;
+   if(!us.exists())throw new Error("Create your public profile first, then upgrade.");
+   const uname:string=us.data().username;
+
+   const intentRef=doc(profileDb,"upgradeintents",user.uid);
+   const [snap,cachedRaw]=[await getDoc(intentRef),localStorage.getItem(UPGRADE_CACHE_KEY+user.uid)];
+   if(!snap.exists()||!cachedRaw)throw new Error("No upgrade in progress. Tap Upgrade to Premium to start.");
+
+   let rec:UpgradeRec,cached:UpgradeRec;
+   try{ rec=await openUpgrade(user.email,String(snap.data().blob)); cached=JSON.parse(cachedRaw); }
+   catch{ throw new Error("Couldn't verify this upgrade. Please start it again."); }
+
+   const age=Date.now()-rec.at;
+   if(rec.u!==uname||rec.u!==cached.u||rec.t!==cached.t||rec.at!==cached.at)throw new Error("Couldn't verify this upgrade. Please start it again.");
+   if(age<-60000||age>UPGRADE_TTL_MS)throw new Error("This upgrade expired (over 15 minutes). Please start it again.");
+
    await setDoc(doc(profileDb,"profiles",uname),{premium:true,updatedAt:serverTimestamp()},{merge:true});
+   // single use
+   try{ await deleteDoc(intentRef); }catch{}
+   try{ localStorage.removeItem(UPGRADE_CACHE_KEY+user.uid); }catch{}
    setStatus("done");
    toast("success","You're upgraded to Premium.");
   }catch(x:any){setStatus("error");setErr(x.message||"Unable to confirm your upgrade.");toast("error",x.message||"Unable to confirm your upgrade.");}
@@ -1072,12 +1238,13 @@ function UpgradeSuccess({user}:{user:User|null}){
   {status==="working"&&<><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Confirming your payment…</p></>}
   {status==="done"&&<>
    <h2>You're Premium <span aria-hidden="true">✦</span></h2>
-   <p className="spts-muted">Your premium public-profile theme and direct file uploads are unlocked.</p>
+   <p className="spts-muted">Your premium public-profile theme, direct file uploads and portfolio are unlocked.</p>
    <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
   </>}
   {status==="error"&&<>
    <h2>Couldn't confirm your upgrade</h2>
    <p className="spts-error">{err}</p>
+   <p className="spts-muted">Already paid? <a className="spts-link" href={supportUrl("Hi, I paid for Premium but the upgrade didn't confirm.")} target="_blank" rel="noreferrer">Contact support</a>.</p>
    <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
   </>}
  </section></main>;
@@ -1308,7 +1475,7 @@ function AdRequest({user,profile}:{user:User;profile:any}){
   <div className="spts-card-head"><h2>Portfolio</h2><span className="spts-premium-tag spts-premium-tag-sm">✦ Premium</span></div>
   <p className="spts-muted">Portfolio is for Premium users.</p>
   <div className="spts-ad-actions">
-   <a className="spts-upgrade-btn" href={`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email||"")}`} target="_blank" rel="noreferrer">Upgrade to Premium</a>
+   <UpgradeButton user={user}/>
   </div>
  </section>;
  return <AdRequestCard user={user} profile={profile}/>;
@@ -1355,7 +1522,7 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
   <p className="spts-muted">Portfolio is Premium-only. You need a profile first.</p>
  </>;
  if(!profile.premium)return <>
-  <a className="spts-upgrade-btn spts-ad-link" href={`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email||"")}`} target="_blank" rel="noreferrer">Upgrade to Premium</a>
+  <UpgradeButton user={user} className="spts-ad-link"/>
   <p className="spts-muted">Portfolio is for Premium users.</p>
  </>;
  return <>

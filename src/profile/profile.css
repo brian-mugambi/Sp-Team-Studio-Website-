@@ -360,7 +360,6 @@ video.spts-media-el{cursor:pointer;}
 }
 
 /* Ads */
-.spts-profile-hero-actions .spts-ad-btn{background:var(--cyan);color:#06060f;border-color:var(--cyan);font-weight:600;}
 .spts-card input[type="date"]{color-scheme:dark;}
 .spts-card p a{color:var(--cyan);}
 .spts-ad{max-width:none;margin:0;padding:0;color:var(--ink);display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;}
@@ -415,3 +414,79 @@ video.spts-media-el{cursor:pointer;}
 .spts-comment-actions button{padding:2px 8px;font-size:0.7rem;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;font-weight:400;}
 .spts-comment-actions .spts-liked{color:#e0245e;border-color:#e0245e;}
 .spts-comments input{font-size:0.8rem;padding:8px;}
+
+/* Upgrade button is a <button> now: beat the generic button styles */
+button.spts-upgrade-btn,.spts-card button.spts-upgrade-btn{
+ background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;border:none;
+ padding:8px 14px;border-radius:9px;font-weight:700;font-size:0.8rem;cursor:pointer;
+}
+button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
+
+/* ==================================================================== *
+ * Public profile buttons — small pills. Basic profiles use the default
+ * (cyan) theme, premium profiles the gold one.
+ * ==================================================================== */
+.spts-profile-hero-actions{gap:8px;margin-top:20px;}
+.spts-profile-hero-actions button,
+.spts-profile-hero-actions .spts-link-btn{
+ display:inline-flex;align-items:center;gap:6px;
+ padding:6px 14px;border-radius:999px;font-size:0.76rem;font-weight:500;letter-spacing:0.02em;
+ background:rgba(34,211,238,0.07);color:var(--cyan);border:1px solid rgba(34,211,238,0.35);
+ text-decoration:none;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease;
+}
+.spts-profile-hero-actions button:hover,
+.spts-profile-hero-actions .spts-link-btn:hover{background:rgba(34,211,238,0.14);border-color:var(--cyan);}
+.spts-profile-hero-actions button[aria-expanded="true"]{background:var(--cyan);color:#06060f;border-color:var(--cyan);}
+/* utility row: quiet text links */
+.spts-hero-actions-2{margin-top:10px;gap:4px;}
+.spts-profile-hero-actions.spts-hero-actions-2 button,
+.spts-profile-hero-actions.spts-hero-actions-2 .spts-link-btn{
+ padding:2px 8px;font-size:0.7rem;border:0!important;background:transparent!important;color:var(--muted)!important;opacity:0.8;
+}
+.spts-profile-hero-actions.spts-hero-actions-2 button:hover,
+.spts-profile-hero-actions.spts-hero-actions-2 .spts-link-btn:hover{color:var(--cyan)!important;opacity:1;}
+/* premium */
+.spts-public.spts-premium .spts-profile-hero-actions button,
+.spts-public.spts-premium .spts-profile-hero-actions .spts-link-btn{background:rgba(255,197,92,0.08);color:#ffc55c;border-color:rgba(255,197,92,0.4);}
+.spts-public.spts-premium .spts-profile-hero-actions button:hover,
+.spts-public.spts-premium .spts-profile-hero-actions .spts-link-btn:hover{background:rgba(255,197,92,0.16);border-color:#ffc55c;}
+.spts-public.spts-premium .spts-profile-hero-actions button[aria-expanded="true"]{background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;border-color:transparent;}
+.spts-public.spts-premium .spts-profile-hero-actions.spts-hero-actions-2 button:hover,
+.spts-public.spts-premium .spts-profile-hero-actions.spts-hero-actions-2 .spts-link-btn:hover{color:#ffc55c!important;}
+
+/* ==================================================================== *
+ * Public profile chat: message 1 → reply 1 → message 2 → reply 2
+ * ==================================================================== */
+.spts-chat{padding:14px;}
+.spts-chat-head{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--line);}
+.spts-chat-head strong{display:block;color:var(--white);font-size:0.9rem;}
+.spts-chat-head small{display:block;color:var(--muted);font-size:0.68rem;}
+.spts-chat-avatar{
+ width:34px;height:34px;flex:none;border-radius:50%;object-fit:cover;
+ display:flex;align-items:center;justify-content:center;
+ background:linear-gradient(140deg,var(--violet),var(--cyan));color:#fff;font-weight:700;font-size:0.85rem;
+}
+.spts-chat-thread{display:flex;flex-direction:column;gap:12px;min-height:160px;max-height:340px;overflow-y:auto;padding:14px 2px;}
+.spts-chat-empty{margin:auto;text-align:center;}
+.spts-chat-exchange{display:flex;flex-direction:column;gap:6px;}
+.spts-chat-row{display:flex;flex-direction:column;max-width:82%;}
+.spts-chat-me{align-self:flex-end;align-items:flex-end;}
+.spts-chat-them{align-self:flex-start;align-items:flex-start;}
+.spts-chat-bubble{padding:8px 12px;border-radius:16px;font-size:0.88rem;line-height:1.4;word-break:break-word;white-space:pre-wrap;}
+.spts-chat-me .spts-chat-bubble{background:var(--cyan);color:#06060f;border-bottom-right-radius:4px;}
+.spts-chat-me .spts-chat-bubble a{color:#06060f;text-decoration:underline;}
+.spts-chat-them .spts-chat-bubble{background:rgba(255,255,255,0.06);color:var(--white);border:1px solid var(--line);border-bottom-left-radius:4px;}
+.spts-chat-meta{display:flex;gap:8px;margin-top:2px;font-size:0.65rem;color:var(--muted);}
+.spts-chat .spts-chat-meta button.spts-chat-del{
+ padding:0;background:none;color:var(--muted);font-size:0.65rem;font-weight:400;
+ text-decoration:underline;border:0;cursor:pointer;
+}
+.spts-chat-compose{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--line);padding-top:10px;}
+.spts-chat .spts-chat-compose textarea{flex:1;height:40px;max-height:110px;padding:9px 14px;border-radius:20px;resize:none;}
+.spts-chat .spts-chat-compose button.spts-chat-send{flex:none;width:40px;height:40px;padding:0;border-radius:50%;font-size:0.95rem;display:flex;align-items:center;justify-content:center;}
+.spts-chat-foot{display:flex;justify-content:space-between;margin-top:6px;font-size:0.65rem;color:var(--muted);}
+/* premium chat */
+.spts-public.spts-premium .spts-chat-me .spts-chat-bubble{background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;}
+.spts-public.spts-premium .spts-chat-me .spts-chat-bubble a{color:#241300;}
+.spts-public.spts-premium .spts-chat .spts-chat-compose button.spts-chat-send{background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;}
+.spts-public.spts-premium .spts-chat .spts-chat-compose textarea:focus{border-color:#ffc55c;}
