@@ -806,6 +806,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   const s=await getDoc(doc(profileDb,"profiles",normalizeUsername(username)));
   if(!s.exists()){setNotFound(true);return;}
   setP(s.data());
+  prefetchAd(s.data().username||normalizeUsername(username)); // so "See ad" opens instantly
   const q=query(collection(profileDb,"posts"),where("ownerId","==",s.data().uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
   onSnapshot(q,x=>setPosts(x.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(e.message));
  }catch(x:any){setErr(x.message||"Unable to load profile");toast("error",x.message||"Unable to load profile");}})()},[username]);
@@ -947,102 +948,314 @@ function UpgradeSuccess({user}:{user:User|null}){
  * Ads
  *
  * Firestore layout:
- *   profiles/{username}/ad/code          -> { html: "<full html string>" }
+ *   profiles/{username}/ad/code          -> { html, startDate?, endDate? }
  *        Added by hand in the Firestore console. Profile owners never
- *        touch it. Public read, no client writes.
+ *        touch it. startDate / endDate are OPTIONAL "YYYY-MM-DD" strings
+ *        (endDate is the last day the ad shows). Outside that window the
+ *        ad counts as not live, so it "expires" and the owner can request
+ *        again. Public read, no client writes.
  *   adrequest/{ownerUid}/messages/{id}   -> the owner's request
- *        { ownerId, username, message, liveDate, durationDays,
- *          deadline, status:"pending", createdAt }
+ *        { ownerId, username, fullName, mobile, message, durationDays,
+ *          liveDate, endDate, status:"pending", createdAt }
+ *        Owner needs create + read on their own uid. The same details are
+ *        also emailed through FormSubmit.co.
  *
  * Public link: /profile/{username}/ad  (AdView below)
  * ------------------------------------------------------------------ */
-const AD_MIN_MESSAGE=10,AD_MAX_MESSAGE=2000,AD_MAX_DAYS=365;
-function todayLocal(){ return new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10); }
+const AD_REQUEST_EMAIL="infospteamstudio@gmail.com";
+const AD_MIN_DESC=10,AD_MAX_DESC=2000;
+const AD_DURATIONS=[
+ {days:1,label:"1 day"},{days:3,label:"3 days"},{days:7,label:"1 week"},
+ {days:14,label:"2 weeks"},{days:30,label:"1 month"},{days:90,label:"3 months"},
+];
+const AD_CACHE_KEY="spts_ad_v1:",AD_LASTREQ_KEY="spts_adreq_v1:";
 
-function AdRequest({user,profile}:{user:User;profile:any}){
- const [msg,setMsg]=useState(""),[live,setLive]=useState(""),[days,setDays]=useState("7"),[deadline,setDeadline]=useState("");
- const [sending,setSending]=useState(false),[err,setErr]=useState("");
+function todayLocal(){ return new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function addDaysISO(iso:string,n:number){const d=new Date(`${iso}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
+// A 1-week ad starting Monday runs Mon..Sun, so the end date is start + (days-1).
+function endDateFor(start:string,days:number){ return addDaysISO(start,days-1); }
+function prettyDate(iso:string){
+ return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short",year:"numeric",timeZone:"UTC"});
+}
+
+type AdDoc={html:string;startDate?:string;endDate?:string};
+function parseAd(d:any):AdDoc|null{
+ if(!d||typeof d.html!=="string"||!d.html.trim())return null;
+ return {html:d.html,startDate:typeof d.startDate==="string"?d.startDate:undefined,endDate:typeof d.endDate==="string"?d.endDate:undefined};
+}
+function adPhase(a:AdDoc,today:string):"live"|"scheduled"|"expired"{
+ if(a.endDate&&a.endDate<today)return "expired";
+ if(a.startDate&&a.startDate>today)return "scheduled";
+ return "live";
+}
+function sameAd(a:AdDoc|null,b:AdDoc|null){ return JSON.stringify(a)===JSON.stringify(b); }
+
+// The ad is cached in localStorage so a refresh paints it instantly (from the
+// first render) and Firestore only refreshes it quietly in the background.
+function readAdCache(u:string):AdDoc|null{
+ try{const r=localStorage.getItem(AD_CACHE_KEY+u);return r?parseAd(JSON.parse(r)):null;}catch{return null;}
+}
+function writeAdCache(u:string,a:AdDoc|null){
+ try{if(a)localStorage.setItem(AD_CACHE_KEY+u,JSON.stringify(a));else localStorage.removeItem(AD_CACHE_KEY+u);}catch{}
+}
+async function fetchAd(u:string):Promise<AdDoc|null>{
+ const s=await getDoc(doc(profileDb,"profiles",u,"ad","code"));
+ return s.exists()?parseAd(s.data()):null;
+}
+// Warm the cache (used by the public profile so "See ad" opens instantly).
+function prefetchAd(u:string){ fetchAd(u).then(a=>writeAdCache(u,a)).catch(()=>{}); }
+
+// Last request the owner made — the "waiting period" is derived from it.
+type AdReqRec={startDate:string;endDate:string;createdMs:number};
+function readLastReq(uid:string):AdReqRec|null{
+ try{const r=localStorage.getItem(AD_LASTREQ_KEY+uid);return r?JSON.parse(r):null;}catch{return null;}
+}
+function writeLastReq(uid:string,r:AdReqRec){ try{localStorage.setItem(AD_LASTREQ_KEY+uid,JSON.stringify(r));}catch{} }
+function reqRecFrom(d:any):AdReqRec|null{
+ const start:string=d?.liveDate||d?.startDate||"";
+ const days=Number(d?.durationDays)||0;
+ const end:string=d?.endDate||(start&&days?endDateFor(start,days):"");
+ if(!start||!end)return null;
+ return {startDate:start,endDate:end,createdMs:d?.createdAt?.toMillis?.()??0};
+}
+
+type AdStatus={phase:"none"|"waiting"|"scheduled"|"live"|"expired";startDate?:string;endDate?:string};
+function useAdStatus(user:User,username:string,bump:number):AdStatus|null{
+ const [status,setStatus]=useState<AdStatus|null>(null);
+ useEffect(()=>{
+  let alive=true;
+  (async()=>{
+   const today=todayLocal();
+   let ad:AdDoc|null=null;
+   try{ad=await fetchAd(username);writeAdCache(username,ad);}catch{}
+   let best:AdReqRec|null=readLastReq(user.uid);
+   try{
+    const q=await getDocs(query(collection(profileDb,"adrequest",user.uid,"messages"),orderBy("createdAt","desc"),limit(1)));
+    const r=q.empty?null:reqRecFrom(q.docs[0].data());
+    if(r&&(!best||r.createdMs>=best.createdMs))best=r;
+   }catch{ /* rules may not allow reads — the local record still works */ }
+   if(!alive)return;
+   const phase=ad?adPhase(ad,today):null;
+   if(ad&&(phase==="live"||phase==="scheduled")){setStatus({phase,startDate:ad.startDate,endDate:ad.endDate});return;}
+   if(best&&best.endDate>=today){setStatus({phase:"waiting",startDate:best.startDate,endDate:best.endDate});return;}
+   if(ad&&phase==="expired"){setStatus({phase:"expired",endDate:ad.endDate});return;}
+   setStatus({phase:"none"});
+  })();
+  return ()=>{alive=false};
+ },[user.uid,username,bump]);
+ return status;
+}
+
+// The signed-in viewer's own profile (used to prefill the request form).
+function useOwnProfile(user:User|null){
+ const [state,setState]=useState<{loading:boolean;profile:any|null}>({loading:!!user,profile:null});
+ useEffect(()=>{
+  if(!user){setState({loading:false,profile:null});return;}
+  let alive=true;
+  setState(s=>({...s,loading:true}));
+  (async()=>{
+   try{
+    const us=await getDoc(doc(profileDb,"users",user.uid));
+    if(us.exists()){
+     const p=await getDoc(doc(profileDb,"profiles",us.data().username));
+     if(p.exists()){if(alive)setState({loading:false,profile:p.data()});return;}
+    }
+   }catch{}
+   if(alive)setState({loading:false,profile:null});
+  })();
+  return ()=>{alive=false};
+ },[user?.uid]);
+ return state;
+}
+
+/* Small modal with the request form. Emails the details through FormSubmit.co,
+ * then records the request in Firestore so the dashboard can show the waiting
+ * period. */
+function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onClose:()=>void;onSent:()=>void}){
  const toast=useToast();
  const today=todayLocal();
+ const [name,setName]=useState<string>(profile.displayName||user.displayName||"");
+ const [mobile,setMobile]=useState<string>(profile.phone||"");
+ const [desc,setDesc]=useState("");
+ const [days,setDays]=useState(7);
+ const [start,setStart]=useState("");
+ const [sending,setSending]=useState(false),[err,setErr]=useState("");
+ const end=start?endDateFor(start,days):"";
+ const durationLabel=AD_DURATIONS.find(d=>d.days===days)?.label||`${days} days`;
+
+ useEffect(()=>{
+  const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape"&&!sending)onClose();};
+  window.addEventListener("keydown",onKey);
+  return ()=>window.removeEventListener("keydown",onKey);
+ },[sending,onClose]);
 
  async function submit(e:React.FormEvent){
   e.preventDefault();
-  const d=Number(days);
-  if(msg.trim().length<AD_MIN_MESSAGE)return setErr(`Describe the ad in at least ${AD_MIN_MESSAGE} characters.`);
-  if(!live||live<today)return setErr("Pick a go-live date that is today or later.");
-  if(!Number.isInteger(d)||d<1||d>AD_MAX_DAYS)return setErr(`Duration must be 1-${AD_MAX_DAYS} days.`);
-  if(!deadline||deadline<today)return setErr("Pick a deadline that is today or later.");
-  if(deadline>live)return setErr("The deadline must be on or before the go-live date.");
+  if(!name.trim())return setErr("Full name is required.");
+  if(mobile.replace(/\D/g,"").length<7)return setErr("Enter a valid mobile number.");
+  if(desc.trim().length<AD_MIN_DESC)return setErr(`Describe the ad in at least ${AD_MIN_DESC} characters.`);
+  if(!start||start<today)return setErr("Pick a start date that is today or later.");
   setErr("");setSending(true);
   try{
-   await addDoc(collection(profileDb,"adrequest",user.uid,"messages"),{
-    ownerId:user.uid,username:profile.username,message:msg.trim(),
-    liveDate:live,durationDays:d,deadline,status:"pending",createdAt:serverTimestamp(),
+   const origin=typeof location!=="undefined"?location.origin:"";
+   const res=await fetch(`https://formsubmit.co/ajax/${AD_REQUEST_EMAIL}`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json",Accept:"application/json"},
+    body:JSON.stringify({
+     _subject:`Ad request from @${profile.username}`,
+     _template:"table",
+     _captcha:"false",
+     email:user.email||"",
+     "Full name":name.trim(),
+     Mobile:mobile.trim(),
+     Description:desc.trim(),
+     Duration:durationLabel,
+     "Start date":start,
+     "End date":end,
+     Username:`@${profile.username}`,
+     "Profile link":`${origin}/profile/${profile.username}`,
+     "Ad link":`${origin}/profile/${profile.username}/ad`,
+    }),
    });
-   setMsg("");setLive("");setDays("7");setDeadline("");
+   const data:any=await res.json().catch(()=>({}));
+   if(!res.ok||data.success===false||data.success==="false")throw new Error(data.message||"Couldn't send your request. Please try again.");
+
+   // Record it so the dashboard can show the waiting period (best-effort).
+   try{
+    await addDoc(collection(profileDb,"adrequest",user.uid,"messages"),{
+     ownerId:user.uid,username:profile.username,fullName:name.trim(),mobile:mobile.trim(),
+     message:desc.trim(),durationDays:days,liveDate:start,endDate:end,status:"pending",createdAt:serverTimestamp(),
+    });
+   }catch{}
+   writeLastReq(user.uid,{startDate:start,endDate:end,createdMs:Date.now()});
    toast("success","Ad request sent.");
+   onSent();
   }catch(x:any){setErr(x.message||"Unable to send request");toast("error",x.message||"Unable to send request");}
   finally{setSending(false);}
  }
 
+ return <div className="spts-modal-backdrop" role="dialog" aria-modal="true" onClick={()=>{if(!sending)onClose();}}>
+  <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
+   <h3 className="spts-modal-title">Request ad run</h3>
+   <form className="spts-adform" onSubmit={submit}>
+    <label>Full name<input required value={name} onChange={e=>setName(e.target.value)} autoComplete="name" disabled={sending}/></label>
+    <label>Mobile<input required type="tel" inputMode="tel" placeholder="+234…" value={mobile} onChange={e=>setMobile(e.target.value)} autoComplete="tel" disabled={sending}/></label>
+    <label>Description
+     <textarea required maxLength={AD_MAX_DESC} placeholder="What is the ad for, and how should it look? e.g. launch event on the 12th, bold and colourful, with a book-tickets button." value={desc} onChange={e=>setDesc(e.target.value)} disabled={sending}/>
+    </label>
+    <div className="spts-adform-row">
+     <label>Duration
+      <select value={days} onChange={e=>setDays(Number(e.target.value))} disabled={sending}>
+       {AD_DURATIONS.map(d=><option key={d.days} value={d.days}>{d.label}</option>)}
+      </select>
+     </label>
+     <label>Start date<input required type="date" min={today} value={start} onChange={e=>setStart(e.target.value)} disabled={sending}/></label>
+    </div>
+    <label>End date (automatic)<input readOnly tabIndex={-1} className="spts-adform-readonly" value={end?prettyDate(end):""} placeholder="Pick a start date"/></label>
+    {err&&<p className="spts-error" role="alert">{err}</p>}
+    <div className="spts-modal-actions">
+     <button type="button" className="spts-ghost" onClick={onClose} disabled={sending}>Cancel</button>
+     <SpinnerButton type="submit" busy={sending} busyLabel="Sending…">Send request</SpinnerButton>
+    </div>
+   </form>
+  </div>
+ </div>;
+}
+
+/* Dashboard card: one button, plus the ad's current state. */
+function AdRequest({user,profile}:{user:User;profile:any}){
+ const [open,setOpen]=useState(false),[bump,setBump]=useState(0);
+ const status=useAdStatus(user,profile.username,bump);
+ const phase=status?.phase;
+ const blocked=phase==="live"||phase==="scheduled";
+ const badge=phase==="live"?"Live":phase==="scheduled"?"Scheduled":phase==="waiting"?"Waiting":phase==="expired"?"Expired":"";
+ const range=(s?:string,e?:string)=>s&&e?`${prettyDate(s)} – ${prettyDate(e)}`:e?`until ${prettyDate(e)}`:s?`from ${prettyDate(s)}`:"";
+
  return <section className="spts-card">
-  <div className="spts-card-head"><h2>Request an ad</h2></div>
-  <p className="spts-muted">Tell us what the ad is for and how it should look. Once it's ready, it goes live at <a href={`/profile/${profile.username}/ad`}>/profile/{profile.username}/ad</a>.</p>
-  <form onSubmit={submit}>
-   <label>What is the ad for?
-    <textarea maxLength={AD_MAX_MESSAGE} placeholder="e.g. I want an ad for my launch event on the 12th, bold and colourful, with a button to book tickets." value={msg} onChange={e=>setMsg(e.target.value)} disabled={sending}/>
-   </label>
-   <label>Go-live date<input type="date" min={today} value={live} onChange={e=>setLive(e.target.value)} disabled={sending}/></label>
-   <label>Duration (days)<input type="number" inputMode="numeric" min={1} max={AD_MAX_DAYS} value={days} onChange={e=>setDays(e.target.value)} disabled={sending}/></label>
-   <label>Deadline (ad must be ready by)<input type="date" min={today} value={deadline} onChange={e=>setDeadline(e.target.value)} disabled={sending}/></label>
-   <div className="spts-form-actions">
-    <SpinnerButton type="submit" busy={sending} busyLabel="Sending…" disabled={!msg.trim()}>Send request</SpinnerButton>
-   </div>
-  </form>
-  {err&&<p className="spts-error">{err}</p>}
+  <div className="spts-card-head"><h2>Ad</h2>{badge&&<span className="spts-badge">{badge}</span>}</div>
+  <p className="spts-muted">
+   {phase==="live"&&<>Your ad is live{status?.endDate?` until ${prettyDate(status.endDate)}`:""}. You can request again once it expires.</>}
+   {phase==="scheduled"&&<>Your ad is ready and goes live {status?.startDate?`on ${prettyDate(status.startDate)}`:"soon"}.</>}
+   {phase==="waiting"&&<>Request sent for {range(status?.startDate,status?.endDate)}. We're preparing your ad — it goes live once it's ready. You can send another request if something changed.</>}
+   {phase==="expired"&&<>Your last ad expired{status?.endDate?` on ${prettyDate(status.endDate)}`:""}. Request another run any time.</>}
+   {(phase==="none"||!phase)&&<>Get an ad at <a href={`/profile/${profile.username}/ad`}>/profile/{profile.username}/ad</a>.</>}
+  </p>
+  <div className="spts-ad-actions">
+   <button type="button" disabled={blocked} onClick={()=>setOpen(true)}>Request ad run</button>
+   {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>See ad</a>}
+  </div>
+  {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setBump(b=>b+1);}}/>}
  </section>;
 }
 
-// Public ad page. Reads the html string and runs it in a sandboxed iframe
-// (no allow-same-origin), so the ad code can't reach this app's auth
-// session, storage or DOM.
-function AdView({username}:{username:string}){
+// Shown on the public ad page when there is no live ad.
+function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
+ const {loading,profile}=useOwnProfile(user);
+ const [open,setOpen]=useState(false),[sent,setSent]=useState(false);
+ if(sent)return <p className="spts-muted">Request sent — we'll be in touch soon.</p>;
+ if(authLoading||(user&&loading))return <button type="button" disabled>Request ad</button>;
+ if(!user)return <>
+  <a className="spts-ad-link spts-ad-cta" href="/profiles">Request ad</a>
+  <p className="spts-muted">You'll create a profile first, then you can request an ad.</p>
+ </>;
+ if(!profile)return <>
+  <a className="spts-ad-link spts-ad-cta" href="/profiles">Create your profile</a>
+  <p className="spts-muted">You need a profile before you can request an ad.</p>
+ </>;
+ return <>
+  <button type="button" onClick={()=>setOpen(true)}>Request ad</button>
+  {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setSent(true);}}/>}
+ </>;
+}
+
+// Public ad page. Runs the html string in a sandboxed iframe (no
+// allow-same-origin), so the ad code can't reach this app's auth session,
+// storage or DOM. A cached copy renders on the very first paint (no loading
+// screen); Firestore then refreshes it silently.
+function AdView({username,user,authLoading}:{username:string;user:User|null;authLoading:boolean}){
  const uname=normalizeUsername(username);
- const [state,setState]=useState<"loading"|"ready"|"missing"|"retry">("loading");
- const [html,setHtml]=useState("");
- const [tries,setTries]=useState(0);
+ const [ad,setAd]=useState<AdDoc|null>(()=>typeof window!=="undefined"?readAdCache(uname):null);
+ const [settled,setSettled]=useState(false),[failed,setFailed]=useState(false),[tries,setTries]=useState(0);
 
  useEffect(()=>{
   let alive=true;
-  setState("loading");
-  (async()=>{
-   try{
-    const s=await getDoc(doc(profileDb,"profiles",uname,"ad","code"));
-    const h=s.exists()?s.data().html:"";
-    if(!alive)return;
-    if(typeof h==="string"&&h.trim()){setHtml(h);setState("ready");}
-    else setState("missing");
-   }catch{
-    if(alive)setState("retry"); // permission denied, offline, etc.
-   }
-  })();
+  setFailed(false);
+  fetchAd(uname).then(a=>{
+   if(!alive)return;
+   writeAdCache(uname,a);
+   setAd(prev=>sameAd(prev,a)?prev:a); // unchanged ad => no iframe reload
+   setSettled(true);
+  }).catch(()=>{
+   if(!alive)return;
+   setFailed(true);setSettled(true); // permission denied, offline, etc.
+  });
   return ()=>{alive=false};
  },[uname,tries]);
+
+ const live=!!ad&&adPhase(ad,todayLocal())==="live";
 
  return <main className="spts-ad">
   <header className="spts-ad-bar">
    <a className="spts-ghost spts-link-btn" href={`/profile/${uname}`}>← @{uname}</a>
   </header>
-  {state==="loading"&&<div className="spts-public-status"><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Loading ad…</p></div>}
-  {state==="missing"&&<div className="spts-public-status"><h1>Ad not found</h1><p className="spts-muted">@{uname} has no ad live right now.</p></div>}
-  {state==="retry"&&<div className="spts-public-status"><h1>Couldn't load the ad</h1><p className="spts-muted">Access was denied or the connection failed. Please try again.</p><button type="button" onClick={()=>setTries(t=>t+1)}>Try again</button></div>}
-  {state==="ready"&&<iframe
+  {live&&<iframe
    className="spts-ad-frame"
    title={`Ad by @${uname}`}
-   srcDoc={html}
+   srcDoc={ad!.html}
    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
    referrerPolicy="no-referrer"
   />}
+  {!live&&!settled&&<div className="spts-ad-frame spts-ad-blank"/>}
+  {!live&&settled&&!failed&&<div className="spts-public-status">
+   <h1>Ad not found</h1>
+   <p className="spts-muted">@{uname} has no ad live right now.</p>
+   <AdRequestCta user={user} authLoading={authLoading}/>
+  </div>}
+  {!live&&settled&&failed&&<div className="spts-public-status">
+   <h1>Couldn't load the ad</h1>
+   <p className="spts-muted">Access was denied or the connection failed. Please try again.</p>
+   <button type="button" onClick={()=>{setSettled(false);setTries(t=>t+1);}}>Try again</button>
+  </div>}
  </main>;
 }
 
@@ -1060,7 +1273,8 @@ export default function ProfileNetwork({username,view}:{username?:string;view?:"
  // /profile/{username}/ad — pass view="ad" from your router, or let the path match below handle it.
  const adMatch=/^\/profile\/([^/]+)\/ad\/?$/.exec(typeof location!=="undefined"?location.pathname:"");
  const adUser=view==="ad"?username:adMatch?decodeURIComponent(adMatch[1]):undefined;
- if(adUser)return <AdView username={adUser}/>;
+ // The ad page never waits for auth: the ad paints straight away, auth only matters for the "Request ad" button.
+ if(adUser)return <ToastHost><AdView key={adUser} username={adUser} user={user} authLoading={loading}/></ToastHost>;
  if(loading)return <main className="spts-page">Loading…</main>;
  return <ToastHost><ConfirmHost><ActiveVideoHost>
   {username==="upgradesuccessConfirm"?<UpgradeSuccess user={user}/>
