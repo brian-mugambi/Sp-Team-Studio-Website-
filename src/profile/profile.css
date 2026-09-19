@@ -395,3 +395,8 @@ video.spts-media-el{cursor:pointer;}
 
 /* Dashboard: read-only profile fields after initial setup */
 .spts-card input.spts-readonly{opacity:0.6;cursor:not-allowed;}
+
+/* Dashboard: profile + inbox behind buttons; delete visitor */
+.spts-dash-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0;}
+.spts-conversation-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.spts-conversation-head button{padding:6px 10px;font-size:0.75rem;}

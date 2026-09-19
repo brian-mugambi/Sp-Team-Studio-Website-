@@ -25,7 +25,7 @@ const PAYSTACK_UPGRADE_URL="https://paystack.shop/pay/bv5n43khmv";
  * wa.me needs the number in international format, so set SUPPORT_COUNTRY_CODE
  * (digits only, e.g. "234" or "60") — it replaces the leading 0 of the local number. */
 const SUPPORT_WHATSAPP="0182322555";
-const SUPPORT_COUNTRY_CODE="254";
+const SUPPORT_COUNTRY_CODE="";
 function supportUrl(text:string){
  const local=SUPPORT_WHATSAPP.replace(/\D/g,"");
  const intl=SUPPORT_COUNTRY_CODE?SUPPORT_COUNTRY_CODE+local.replace(/^0+/,""):local;
@@ -282,6 +282,24 @@ async function cascadeMessage(conversationId:string,messageId:string){
   limit(500)
  ));
  r.forEach(x=>b.delete(x.ref)); await b.commit();
+}
+
+// Deletes a visitor entirely: every message, every reply, then the conversation
+// itself (last, so a failure part-way leaves it visible to retry).
+async function cascadeConversation(conversationId:string){
+ const refs:any[]=[];
+ const ms=await getDocs(query(collection(profileDb,"conversations",conversationId,"messages"),limit(500)));
+ await Promise.all(ms.docs.map(async m=>{
+  const r=await getDocs(query(collection(m.ref,"replies"),limit(500)));
+  r.forEach(x=>refs.push(x.ref));
+  refs.push(m.ref);
+ }));
+ refs.push(doc(profileDb,"conversations",conversationId));
+ for(let i=0;i<refs.length;i+=400){
+  const b=writeBatch(profileDb);
+  refs.slice(i,i+400).forEach(r=>b.delete(r));
+  await b.commit();
+ }
 }
 
 /* ------------------------------------------------------------------ *
@@ -550,6 +568,7 @@ function ConversationThread({conversationId,visitorId,viewerRole="owner",preview
  const [openReplies,setOpenReplies]=useState<Record<string,boolean>>({});
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
  const [showAllMessages,setShowAllMessages]=useState(!previewCount);
+ const [deletingVisitor,setDeletingVisitor]=useState(false);
  const confirm=useConfirm();const toast=useToast();
 
  useEffect(()=>{
@@ -579,10 +598,25 @@ setMessages(docs);setLoading(false);
   finally{setPendingDeleteId(null);}
  }
 
+ async function deleteVisitor(){
+  const ok=await confirm({
+   title:"Delete this visitor?",
+   body:<p className="spts-muted">Removes the visitor with all their messages and replies. This can't be undone.</p>,
+   confirmLabel:"Delete visitor",danger:true,
+  });
+  if(!ok)return;
+  setDeletingVisitor(true);
+  try{ await cascadeConversation(conversationId);toast("success","Visitor deleted."); }
+  catch(x:any){setErr(x.message||"Unable to delete visitor");toast("error",x.message||"Unable to delete visitor");setDeletingVisitor(false);}
+ }
+
  const shownMessages=(!previewCount||showAllMessages)?messages:messages.slice(Math.max(0,messages.length-previewCount));
  const hiddenCount=messages.length-shownMessages.length;
  return <div className="spts-conversation">
-  <div className="spts-conversation-head">Visitor {visitorId.slice(0,8)}</div>
+  <div className="spts-conversation-head">
+   <span>Visitor {visitorId.slice(0,8)}</span>
+   {viewerRole==="owner"&&<SpinnerButton className="spts-ghost" busy={deletingVisitor} busyLabel="Deleting…" onClick={deleteVisitor}>Delete visitor</SpinnerButton>}
+  </div>
   {loading&&<p className="spts-muted">Loading…</p>}
   {err&&<p className="spts-error">{err}</p>}
   {!loading&&messages.length===0&&<p className="spts-muted">No messages in this conversation.</p>}
@@ -637,9 +671,12 @@ function Dashboard({user}:{user:User}){
  const [savingProfile,setSavingProfile]=useState(false);
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [addingPost,setAddingPost]=useState(false);
+ const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false);
  const confirm=useConfirm();const toast=useToast();
  const isPremium=!!profile?.premium;
  const locked=!!profile; // after initial setup only the bio is editable
+ // Profile and inbox stay hidden until asked for — except a brand-new user, who needs the create form.
+ useEffect(()=>{if(!loadingProfile&&!profile)setProfileOpen(true);},[loadingProfile,profile]);
 
  useEffect(()=>{(async()=>{
   try{
@@ -741,7 +778,12 @@ function Dashboard({user}:{user:User}){
 
  return <main className="spts-page"><header><h1>Dashboard</h1><button className="spts-ghost" onClick={()=>signOut(profileAuth)}>Log out</button></header>
 
- <section className="spts-card">
+ <div className="spts-dash-actions">
+  <button type="button" aria-expanded={profileOpen} onClick={()=>setProfileOpen(o=>!o)}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>
+  <button type="button" aria-expanded={inboxOpen} onClick={()=>setInboxOpen(o=>!o)}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
+ </div>
+
+ {profileOpen&&<section className="spts-card">
   <div className="spts-card-head">
    <h2>Profile</h2>
    <div className="spts-card-head-badges">
@@ -785,7 +827,9 @@ function Dashboard({user}:{user:User}){
     {profile&&<button type="button" className="spts-ghost" onClick={cancelEdit} disabled={savingProfile}>Cancel</button>}
    </div>
   </form>}
- </section>
+ </section>}
+
+ {inboxOpen&&<Messages user={user}/>}
 
  {profile&&<AdRequest user={user} profile={profile}/>}
 
@@ -809,7 +853,6 @@ function Dashboard({user}:{user:User}){
   </>}
  </section>
 
- <Messages user={user}/>
  {err&&<p className="spts-error">{err}</p>}</main>
 }
 
