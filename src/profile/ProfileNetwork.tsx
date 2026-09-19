@@ -1184,9 +1184,9 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   {p.premium&&<span className="spts-premium-badge">✦ Premium</span>}
   {p.bio&&<p className="spts-bio spts-profile-bio"><LinkText text={p.bio}/></p>}
   {(p.websiteUrl||p.email||p.phone)&&<div className="spts-profile-meta">
-   {p.websiteUrl&&<a className="spts-meta-chip" href={p.websiteUrl} target="_blank" rel="noreferrer">🌐 Website</a>}
-   {p.email&&<a className="spts-meta-chip" href={`mailto:${p.email}`}>✉️ Email</a>}
-   {p.phone&&<a className="spts-meta-chip" href={`tel:${p.phone}`}>📞 Phone</a>}
+   {p.websiteUrl&&<a className="spts-meta-chip" href={p.websiteUrl} target="_blank" rel="noreferrer">Website</a>}
+   {p.email&&<a className="spts-meta-chip" href={`mailto:${p.email}`}>Email</a>}
+   {p.phone&&<a className="spts-meta-chip" href={`tel:${p.phone}`}>Phone</a>}
   </div>}
   <div className="spts-profile-hero-actions">
    <button type="button" aria-expanded={postsOpen} onClick={()=>setPostsOpen(o=>!o)}>{postsOpen?"Hide posts":"See posts"}</button>
