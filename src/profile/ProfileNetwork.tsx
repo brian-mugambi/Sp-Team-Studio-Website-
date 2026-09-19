@@ -266,13 +266,34 @@ function AutoDeleteNoticeSm({text}:{text:string}){
 /* ------------------------------------------------------------------ *
  * Cascades — unchanged, just relocated
  * ------------------------------------------------------------------ */
+// Deletes in chunks of 400 (batch limit is 500). Order matters: put the parent last.
+async function commitDeletes(refs:any[]){
+ for(let i=0;i<refs.length;i+=400){
+  const b=writeBatch(profileDb);
+  refs.slice(i,i+400).forEach(r=>b.delete(r));
+  await b.commit();
+ }
+}
 async function cascadePost(postId:string){
- const b=writeBatch(profileDb); b.delete(doc(profileDb,"posts",postId));
  const [l,c]=await Promise.all([
   getDocs(query(collection(profileDb,"posts",postId,"likes"),limit(500))),
   getDocs(query(collection(profileDb,"posts",postId,"comments"),limit(500)))
  ]);
- l.forEach(x=>b.delete(x.ref)); c.forEach(x=>b.delete(x.ref)); await b.commit();
+ const refs:any[]=[];
+ l.forEach(x=>refs.push(x.ref));
+ await Promise.all(c.docs.map(async cd=>{
+  const cl=await getDocs(query(collection(cd.ref,"likes"),limit(500)));
+  cl.forEach(x=>refs.push(x.ref));
+  refs.push(cd.ref);
+ }));
+ refs.push(doc(profileDb,"posts",postId));
+ await commitDeletes(refs);
+}
+// A comment goes together with its likes.
+async function cascadeComment(postId:string,commentId:string){
+ const cref=doc(profileDb,"posts",postId,"comments",commentId);
+ const l=await getDocs(query(collection(cref,"likes"),limit(500)));
+ await commitDeletes([...l.docs.map(x=>x.ref),cref]);
 }
 async function cascadeMessage(conversationId:string,messageId:string){
  const b=writeBatch(profileDb);
@@ -319,6 +340,7 @@ type TTLEntry=
  |{kind:"post";postId:string;deleteAt:number}
  |{kind:"comment";postId:string;commentId:string;deleteAt:number}
  |{kind:"like";postId:string;uid:string;deleteAt:number}
+ |{kind:"commentlike";postId:string;commentId:string;uid:string;deleteAt:number}
  |{kind:"conversation";conversationId:string;deleteAt:number}
  |{kind:"message";conversationId:string;messageId:string;deleteAt:number}
  |{kind:"reply";conversationId:string;messageId:string;replyId:string;deleteAt:number};
@@ -343,7 +365,8 @@ async function runTTLSweep(){
  for(const e of due){
   try{
    if(e.kind==="post")await cascadePost(e.postId);
-   else if(e.kind==="comment")await deleteDoc(doc(profileDb,"posts",e.postId,"comments",e.commentId));
+   else if(e.kind==="comment")await cascadeComment(e.postId,e.commentId);
+   else if(e.kind==="commentlike")await deleteDoc(doc(profileDb,"posts",e.postId,"comments",e.commentId,"likes",e.uid));
    else if(e.kind==="like")await deleteDoc(doc(profileDb,"posts",e.postId,"likes",e.uid));
    else if(e.kind==="conversation")await deleteDoc(doc(profileDb,"conversations",e.conversationId));
    else if(e.kind==="message")await cascadeMessage(e.conversationId,e.messageId);
@@ -374,12 +397,45 @@ function Auth({done}:{done:()=>void}){
 }
 
 /* ------------------------------------------------------------------ *
+ * CommentItem — one comment with its own like (posts/{id}/comments/{id}/likes/{uid})
+ * ------------------------------------------------------------------ */
+function CommentItem({postId,comment,user,deleting,onDelete}:{postId:string;comment:any;user:User|null;deleting:boolean;onDelete:()=>void}){
+ const [likeCount,setLikeCount]=useState(0),[liked,setLiked]=useState(false),[busy,setBusy]=useState(false);
+ const toast=useToast();
+
+ useEffect(()=>onSnapshot(collection(profileDb,"posts",postId,"comments",comment.id,"likes"),s=>{
+  setLikeCount(s.size);
+  setLiked(!!user&&s.docs.some(d=>d.id===user.uid));
+ },()=>{}),[postId,comment.id,user?.uid]);
+
+ async function toggleLike(){
+  if(!user){toast("error","Log in to like comments.");return;}
+  setBusy(true);
+  const ref=doc(profileDb,"posts",postId,"comments",comment.id,"likes",user.uid);
+  try{
+   if(liked)await deleteDoc(ref);
+   else{ await setDoc(ref,{createdAt:serverTimestamp()}); scheduleAutoDelete({kind:"commentlike",postId,commentId:comment.id,uid:user.uid}); }
+  }catch(x:any){toast("error",x.message||"Unable to update like");}
+  finally{setBusy(false);}
+ }
+
+ return <div className="spts-comment">
+  <p><LinkText text={comment.text}/></p>
+  <div className="spts-comment-actions">
+   <SpinnerButton busy={busy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike} title="Likes auto-delete after 24h on this device">{liked?"♥":"♡"} {likeCount}</SpinnerButton>
+   {user&&user.uid===comment.ownerId&&<SpinnerButton className="spts-ghost" busy={deleting} busyLabel="…" onClick={onDelete}>Delete</SpinnerButton>}
+  </div>
+ </div>;
+}
+
+/* ------------------------------------------------------------------ *
  * PostCard
  * ------------------------------------------------------------------ */
 function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|null;canDeletePost:boolean;onDeletePost:()=>Promise<void>}){
  const [likeCount,setLikeCount]=useState(0),[liked,setLiked]=useState(false),[comments,setComments]=useState<any[]>([]),[commentText,setCommentText]=useState(""),[err,setErr]=useState("");
  const [likeBusy,setLikeBusy]=useState(false),[commentBusy,setCommentBusy]=useState(false),[deleteBusy,setDeleteBusy]=useState(false);
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
+ const [commentsOpen,setCommentsOpen]=useState(false);
  const confirm=useConfirm();const toast=useToast();
 
  useEffect(()=>{
@@ -387,11 +443,16 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
    setLikeCount(s.size);
    setLiked(!!user&&s.docs.some(d=>d.id===user.uid));
   },e=>setErr(e.message));
-  const unsubComments=onSnapshot(query(collection(profileDb,"posts",post.id,"comments"),orderBy("createdAt","asc"),limit(200)),s=>{
+  return ()=>{unsubLikes()};
+ },[post.id,user?.uid]);
+
+ // Comments load only when the visitor opens them.
+ useEffect(()=>{
+  if(!commentsOpen)return;
+  return onSnapshot(query(collection(profileDb,"posts",post.id,"comments"),orderBy("createdAt","asc"),limit(200)),s=>{
    setComments(s.docs.map(d=>({id:d.id,...d.data()} as any)));
   },e=>setErr(e.message));
-  return ()=>{unsubLikes();unsubComments()};
- },[post.id,user?.uid]);
+ },[commentsOpen,post.id]);
 
  async function toggleLike(){
   if(!user)return setErr("Log in to like posts.");
@@ -416,12 +477,12 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
  async function deleteComment(commentId:string){
   const ok=await confirm({
    title:"Delete this comment?",
-   body:<p className="spts-muted">This removes only your comment. The post, its likes, and every other comment are not affected.</p>,
+   body:<p className="spts-muted">This removes your comment and its likes. The post and other comments are not affected.</p>,
    confirmLabel:"Delete comment",danger:true,
   });
   if(!ok)return;
   setPendingDeleteId(commentId);
-  try{ await deleteDoc(doc(profileDb,"posts",post.id,"comments",commentId));toast("success","Comment deleted."); }
+  try{ await cascadeComment(post.id,commentId);toast("success","Comment deleted."); }
   catch(x:any){setErr(x.message||"Unable to delete comment");toast("error",x.message||"Unable to delete comment");}
   finally{setPendingDeleteId(null);}
  }
@@ -447,20 +508,18 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
    <SpinnerButton busy={likeBusy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike} title="Likes auto-delete after 24h on this device">
     {liked?"♥":"♡"} {likeCount}
    </SpinnerButton>
+   <button type="button" aria-expanded={commentsOpen} onClick={()=>setCommentsOpen(o=>!o)}>{commentsOpen?"Hide comments":"Comments"}</button>
    {canDeletePost&&<SpinnerButton className="spts-ghost" busy={deleteBusy} busyLabel="Deleting…" onClick={handleDeletePost}>Delete post</SpinnerButton>}
   </div>
-  <div className="spts-comments">
+  {commentsOpen&&<div className="spts-comments">
    {comments.length===0&&<p className="spts-muted">No comments yet.</p>}
-   {comments.map(c=><div className="spts-comment" key={c.id}>
-    <p><LinkText text={c.text}/></p>
-    {user&&user.uid===c.ownerId&&<SpinnerButton className="spts-ghost" busy={pendingDeleteId===c.id} busyLabel="Deleting…" onClick={()=>deleteComment(c.id)}>Delete</SpinnerButton>}
-   </div>)}
+   {comments.map(c=><CommentItem key={c.id} postId={post.id} comment={c} user={user} deleting={pendingDeleteId===c.id} onDelete={()=>deleteComment(c.id)}/>)}
    <form onSubmit={addComment}>
     <input maxLength={300} placeholder={user?"Add a comment":"Log in to comment"} value={commentText} onChange={e=>setCommentText(e.target.value)} disabled={!user||commentBusy}/>
     <SpinnerButton type="submit" busy={commentBusy} busyLabel="Posting…" disabled={!user||!commentText.trim()}>Comment</SpinnerButton>
    </form>
    {user&&<AutoDeleteNoticeSm text="Comments auto-delete after 24h."/>}
-  </div>
+  </div>}
   {err&&<p className="spts-error">{err}</p>}
  </article>;
 }

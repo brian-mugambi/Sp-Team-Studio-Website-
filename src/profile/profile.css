@@ -405,3 +405,13 @@ video.spts-media-el{cursor:pointer;}
 .spts-ad-bar{gap:8px;padding:6px 10px;}
 .spts-ad-bar .spts-link-btn,.spts-ad-bar button{padding:4px 10px;font-size:0.72rem;border-radius:7px;opacity:0.7;transition:opacity .15s ease;}
 .spts-ad-bar .spts-link-btn:hover,.spts-ad-bar button:hover{opacity:1;}
+
+/* Comments: hidden behind a button, smaller and visually distinct from the caption */
+.spts-comments{margin-top:8px;}
+.spts-comments > p.spts-muted{font-size:0.75rem;}
+.spts-comments .spts-comment{align-items:flex-start;padding:6px 8px;border-top:none;border-left:2px solid var(--line);border-radius:0 8px 8px 0;background:rgba(255,255,255,0.03);}
+.spts-comments .spts-comment p{margin:0;font-size:0.78rem;line-height:1.4;color:var(--muted);word-break:break-word;}
+.spts-comment-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.spts-comment-actions button{padding:2px 8px;font-size:0.7rem;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;font-weight:400;}
+.spts-comment-actions .spts-liked{color:#e0245e;border-color:#e0245e;}
+.spts-comments input{font-size:0.8rem;padding:8px;}
