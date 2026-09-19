@@ -330,6 +330,13 @@ video.spts-media-el{cursor:pointer;}
 .spts-upgrade-confirm{text-align:center;display:grid;gap:10px;justify-items:center;padding:24px 12px;}
 .spts-upgrade-confirm h2{color:var(--white);}
 
+/* Restricted-account notice (upgrade flow) + toast link */
+.spts-toast-action{color:var(--cyan);text-decoration:underline;font-weight:600;}
+.spts-flag-notice{display:grid;gap:10px;text-align:left;padding:12px 14px;border-radius:10px;background:rgba(255,184,92,0.08);border:1px solid rgba(255,184,92,0.3);color:var(--muted);font-size:0.85rem;line-height:1.5;}
+.spts-flag-notice ul{margin:4px 0 0 18px;padding:0;display:grid;gap:3px;}
+.spts-flag-h{font-size:0.72rem;letter-spacing:0.05em;text-transform:uppercase;color:#ffb85c;}
+.spts-flag-h.spts-flag-ok{color:var(--cyan);}
+
 /* ==================================================================== *
  * Premium public-profile theme — additive skin on top of the base
  * theme, applied only when the profile owner is premium.

@@ -33,29 +33,123 @@ function supportUrl(text:string){
 }
 
 /* ------------------------------------------------------------------ *
+ * Errors, app-wide
+ *  - Firebase permission errors / disabled sign-in never show raw Firebase text. First time
+ *    the user sees "Something went wrong, try again." If the SAME error keeps happening
+ *    (ACCESS_ERR_LIMIT in a row, per browser session) they're pointed to Contact support.
+ *    Use fail(toast,x,"Unable to …") in catch blocks and accessText(e,…) in passive listeners.
+ *  - Restricted account: every time the dashboard opens, the signed-in UID is checked against
+ *    its profile in Firestore (checkAccount). If it isn't found there, the flag notice shows.
+ * ------------------------------------------------------------------ */
+const ACCESS_GENERIC="Something went wrong, try again.";
+const ACCESS_PERSIST="Still not working. Contact support for help.";
+const ACCESS_ERR_LIMIT=2;
+const ACCESS_ERR_WINDOW_MS=10*60*1000; // a streak older than this starts over
+const ACCESS_ERR_DEDUPE_MS=1500;       // several listeners failing at once count as one
+const ACCESS_ERR_KEY="spts_access_err_v1";
+const FIREBASE_ACCESS_CODES=new Set([
+ "permission-denied","unauthenticated",                             // Firestore rules
+ "auth/operation-not-allowed","auth/admin-restricted-operation",    // sign-in method disabled
+ "auth/configuration-not-found","auth/user-disabled",               // auth turned off / account disabled
+]);
+function firebaseAccessCode(x:any):string|null{
+ const c=String(x?.code||"");
+ if(FIREBASE_ACCESS_CODES.has(c))return c;
+ if(/missing or insufficient permissions/i.test(String(x?.message||"")))return "permission-denied";
+ return null;
+}
+type ErrStreak={code:string;n:number;at:number};
+let _errMem:ErrStreak|null=null; // fallback if sessionStorage is blocked
+let _lastAccessCode="";
+function noteAccessError(code:string|null):boolean{ // true once the same error has repeated enough
+ const now=Date.now();
+ let prev=_errMem;
+ try{ const r=sessionStorage.getItem(ACCESS_ERR_KEY); if(r)prev=JSON.parse(r); }catch{}
+ let next:ErrStreak|null=null; // any other outcome resets the streak
+ if(code){
+  const same=!!prev&&prev.code===code&&now-prev.at<=ACCESS_ERR_WINDOW_MS;
+  const dup=same&&now-prev!.at<ACCESS_ERR_DEDUPE_MS;
+  next={code,n:same?(dup?prev!.n:prev!.n+1):1,at:dup?prev!.at:now};
+ }
+ _errMem=next;
+ try{ next?sessionStorage.setItem(ACCESS_ERR_KEY,JSON.stringify(next)):sessionStorage.removeItem(ACCESS_ERR_KEY); }catch{}
+ return !!next&&next.n>=ACCESS_ERR_LIMIT;
+}
+// Text safe to show inline for any error.
+function accessText(x:any,fallback:string):string{
+ const code=firebaseAccessCode(x);
+ if(!code){noteAccessError(null);return x?.message||fallback;}
+ _lastAccessCode=code;
+ return noteAccessError(code)?ACCESS_PERSIST:ACCESS_GENERIC;
+}
+// Toast + inline text in one call: setErr(fail(toast,x,"Unable to save profile"))
+function fail(toast:ReturnType<typeof useToast>,x:any,fallback:string):string{
+ const text=accessText(x,fallback);
+ if(text===ACCESS_PERSIST)toast("error","Still not working.",{label:"Contact support",href:supportUrl(`Hi, something keeps going wrong on my account${_lastAccessCode?` (${_lastAccessCode})`:""}. Can you help?`)});
+ else toast("error",text);
+ return text;
+}
+// Render inline error text; the persistent case gets a Contact support link.
+function ErrText({text}:{text:string}){
+ if(text!==ACCESS_PERSIST)return <>{text}</>;
+ return <>Still not working. <a className="spts-link" href={supportUrl(`Hi, something keeps going wrong on my account${_lastAccessCode?` (${_lastAccessCode})`:""}. Can you help?`)} target="_blank" rel="noreferrer">Contact support</a> for help.</>;
+}
+
+const flaggedError=()=>Object.assign(new Error("account-flagged"),{code:"spts/account-flagged"});
+const isFlagged=(x:any)=>x?.code==="spts/account-flagged";
+type Standing={state:"new"}|{state:"ok";username:string;profile:any};
+// users/{uid} -> username -> profiles/{username}, whose uid must equal the signed-in uid.
+// No users/{uid} at all = a new sign-up that hasn't created a profile yet (normal, not flagged).
+async function checkAccount(user:User):Promise<Standing>{
+ const us=await getDoc(doc(profileDb,"users",user.uid));
+ if(!us.exists())return {state:"new"};
+ const uname:string=us.data().username;
+ const pf=uname?await getDoc(doc(profileDb,"profiles",uname)):null;
+ if(!pf||!pf.exists()||pf.data().uid!==user.uid)throw flaggedError();
+ return {state:"ok",username:uname,profile:pf.data()};
+}
+async function requireLinkedProfile(user:User):Promise<string>{
+ const st=await checkAccount(user);
+ if(st.state==="new")throw new Error("Create your public profile first, then upgrade.");
+ return st.username;
+}
+
+// Edit these two lists to match what really is / isn't affected.
+const FLAG_AFFECTED=["Your public profile page (it may not show or update)","Editing or managing your profile","Upgrading to Premium and Premium features","Portfolio requests"];
+const FLAG_STILL_OK=["Logging in and out","Viewing other people's public profiles","Sending messages and comments on other profiles","Your inbox and existing messages"];
+function AccountFlagNotice({uid,showSupport=true}:{uid?:string;showSupport?:boolean}){
+ return <div className="spts-flag-notice" role="alert">
+  <p>Your account is currently restricted, so some features may not work until it has been reviewed.</p>
+  <div><span className="spts-flag-h">May not work</span><ul>{FLAG_AFFECTED.map(t=><li key={t}>{t}</li>)}</ul></div>
+  <div><span className="spts-flag-h spts-flag-ok">Still available</span><ul>{FLAG_STILL_OK.map(t=><li key={t}>{t}</li>)}</ul></div>
+  <p>Your login and the services above are not affected.{showSupport&&<> If you think this is a mistake, <a className="spts-link" href={supportUrl(`Hi, my account is showing as restricted and I'd like it reviewed.${uid?` Account ID: ${uid}`:""}`)} target="_blank" rel="noreferrer">contact support</a> and we'll review it.</>}</p>
+ </div>;
+}
+
+/* ------------------------------------------------------------------ *
  * Shared UI primitives: Toasts, ConfirmDialog, SpinnerButton
  * These replace window.confirm / window.alert everywhere and give
  * every async action a visible loading state.
  * ------------------------------------------------------------------ */
 
-type Toast = { id: number; kind: "success"|"error"|"info"; text: string };
-const ToastCtx = React.createContext<(kind: Toast["kind"], text: string)=>void>(()=>{});
+type Toast = { id: number; kind: "success"|"error"|"info"; text: string; action?: {label:string;href:string} };
+const ToastCtx = React.createContext<(kind: Toast["kind"], text: string, action?: Toast["action"])=>void>(()=>{});
 function useToast(){ return React.useContext(ToastCtx); }
 
 function ToastHost({children}:{children?:React.ReactNode}){
  const [items,setItems]=useState<Toast[]>([]);
  const idRef=useRef(0);
- function push(kind:Toast["kind"],text:string){
+ function push(kind:Toast["kind"],text:string,action?:Toast["action"]){
   const id=++idRef.current;
-  setItems(s=>[...s,{id,kind,text}]);
-  setTimeout(()=>setItems(s=>s.filter(t=>t.id!==id)),4200);
+  setItems(s=>[...s,{id,kind,text,action}]);
+  setTimeout(()=>setItems(s=>s.filter(t=>t.id!==id)),action?9000:4200); // toasts with a link stay longer
  }
  return <ToastCtx.Provider value={push}>
   {children}
   <div className="spts-toast-host" role="status" aria-live="polite">
    {items.map(t=><div key={t.id} className={`spts-toast spts-toast-${t.kind}`} onClick={()=>setItems(s=>s.filter(x=>x.id!==t.id))}>
     <span className="spts-toast-icon">{t.kind==="success"?"✓":t.kind==="error"?"!":"i"}</span>
-    <span>{t.text}</span>
+    <span>{t.text}{t.action&&<> <a className="spts-toast-action" href={t.action.href} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{t.action.label}</a></>}</span>
    </div>)}
   </div>
  </ToastCtx.Provider>;
@@ -386,13 +480,13 @@ function Auth({done}:{done:()=>void}){
   else await signInWithEmailAndPassword(profileAuth,email,password);
   toast("success",signup?"Account created.":"Welcome back.");
   done();
- }catch(x:any){setErr(x.message||"Authentication failed");toast("error",x.message||"Authentication failed");}
+ }catch(x:any){setErr(fail(toast,x,"Authentication failed"));}
  finally{setBusy(false);}}
  return <section className="spts-card"><h2>{signup?"Create your profile":"Log in"}</h2><form onSubmit={go}>
  <label>Email<input type="email" required placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/></label>
  <label>Password<input type="password" required minLength={6} placeholder="At least 6 characters" value={password} onChange={e=>setPassword(e.target.value)} disabled={busy}/></label>
  <SpinnerButton type="submit" busy={busy} busyLabel={signup?"Creating…":"Logging in…"}>{signup?"Sign up":"Log in"}</SpinnerButton>
- </form>{err&&<p className="spts-error">{err}</p>}
+ </form>{err&&<p className="spts-error"><ErrText text={err}/></p>}
  <button className="spts-link" onClick={()=>setSignup(!signup)} disabled={busy}>{signup?"Already registered? Log in":"Create an account"}</button></section>
 }
 
@@ -415,7 +509,7 @@ function CommentItem({postId,comment,user,deleting,onDelete}:{postId:string;comm
   try{
    if(liked)await deleteDoc(ref);
    else{ await setDoc(ref,{createdAt:serverTimestamp()}); scheduleAutoDelete({kind:"commentlike",postId,commentId:comment.id,uid:user.uid}); }
-  }catch(x:any){toast("error",x.message||"Unable to update like");}
+  }catch(x:any){fail(toast,x,"Unable to update like");}
   finally{setBusy(false);}
  }
 
@@ -442,7 +536,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   const unsubLikes=onSnapshot(collection(profileDb,"posts",post.id,"likes"),s=>{
    setLikeCount(s.size);
    setLiked(!!user&&s.docs.some(d=>d.id===user.uid));
-  },e=>setErr(e.message));
+  },e=>setErr(accessText(e,ACCESS_GENERIC)));
   return ()=>{unsubLikes()};
  },[post.id,user?.uid]);
 
@@ -451,7 +545,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   if(!commentsOpen)return;
   return onSnapshot(query(collection(profileDb,"posts",post.id,"comments"),orderBy("createdAt","asc"),limit(200)),s=>{
    setComments(s.docs.map(d=>({id:d.id,...d.data()} as any)));
-  },e=>setErr(e.message));
+  },e=>setErr(accessText(e,ACCESS_GENERIC)));
  },[commentsOpen,post.id]);
 
  async function toggleLike(){
@@ -459,7 +553,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   setErr("");setLikeBusy(true);
   const ref=doc(profileDb,"posts",post.id,"likes",user.uid);
   try{ liked?await deleteDoc(ref):await setDoc(ref,{createdAt:serverTimestamp()}); if(!liked)scheduleAutoDelete({kind:"like",postId:post.id,uid:user.uid}); }
-  catch(x:any){setErr(x.message||"Unable to update like");toast("error",x.message||"Unable to update like");}
+  catch(x:any){setErr(fail(toast,x,"Unable to update like"));}
   finally{setLikeBusy(false);}
  }
 
@@ -470,7 +564,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   if(!text)return;
   setErr("");setCommentBusy(true);
   try{ const ref=await addDoc(collection(profileDb,"posts",post.id,"comments"),{ownerId:user.uid,text,createdAt:serverTimestamp()}); scheduleAutoDelete({kind:"comment",postId:post.id,commentId:ref.id}); setCommentText(""); toast("success","Comment added — it auto-deletes in 24h on this device."); }
-  catch(x:any){setErr(x.message||"Unable to post comment");toast("error",x.message||"Unable to post comment");}
+  catch(x:any){setErr(fail(toast,x,"Unable to post comment"));}
   finally{setCommentBusy(false);}
  }
 
@@ -483,7 +577,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   if(!ok)return;
   setPendingDeleteId(commentId);
   try{ await cascadeComment(post.id,commentId);toast("success","Comment deleted."); }
-  catch(x:any){setErr(x.message||"Unable to delete comment");toast("error",x.message||"Unable to delete comment");}
+  catch(x:any){setErr(fail(toast,x,"Unable to delete comment"));}
   finally{setPendingDeleteId(null);}
  }
 
@@ -520,7 +614,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
    </form>
    {user&&<AutoDeleteNoticeSm text="Comments auto-delete after 24h."/>}
   </div>}
-  {err&&<p className="spts-error">{err}</p>}
+  {err&&<p className="spts-error"><ErrText text={err}/></p>}
  </article>;
 }
 
@@ -555,7 +649,7 @@ function ReplyThread({
     catch{ out[r.id]="[unable to decrypt]"; }
    }));
    setDecrypted(out);
-  },e=>setErr(e.message));
+  },e=>setErr(accessText(e,ACCESS_GENERIC)));
  },[conversationId,messageId]);
 
  async function sendReply(e:React.FormEvent){
@@ -578,7 +672,7 @@ function ReplyThread({
    );
    scheduleAutoDelete({kind:"reply",conversationId,messageId,replyId:replyRef.id});
    setText("");toast("success","Reply sent — it auto-deletes in 24h on this device.");
-  }catch(x:any){ setErr(x.message||"Unable to send reply");toast("error",x.message||"Unable to send reply"); }
+  }catch(x:any){ setErr(fail(toast,x,"Unable to send reply")); }
   finally{ setSending(false); }
  }
 
@@ -593,7 +687,7 @@ function ReplyThread({
   try{
    await deleteDoc(doc(profileDb,"conversations",conversationId,"messages",messageId,"replies",replyId));
    toast("success","Reply deleted.");
-  }catch(x:any){ setErr(x.message||"Unable to delete reply");toast("error",x.message||"Unable to delete reply"); }
+  }catch(x:any){ setErr(fail(toast,x,"Unable to delete reply")); }
   finally{ setPendingDeleteId(null); }
  }
 
@@ -615,7 +709,7 @@ function ReplyThread({
    <SpinnerButton type="submit" busy={sending} busyLabel="Sending…" disabled={!text.trim()}>Reply</SpinnerButton>
   </form>}
   {canReply&&<AutoDeleteNoticeSm text="Replies auto-delete after 24h."/>}
-  {err&&<p className="spts-error">{err}</p>}
+  {err&&<p className="spts-error"><ErrText text={err}/></p>}
  </div>;
 }
 
@@ -641,7 +735,7 @@ setMessages(docs);setLoading(false);
     catch{ out[m.id]="[unable to decrypt]"; }
    }));
    setDecrypted(out);
-  },e=>{setErr(e.message);setLoading(false)});
+  },e=>{setErr(accessText(e,ACCESS_GENERIC));setLoading(false)});
  },[conversationId]);
 
  async function deleteMessage(messageId:string){
@@ -653,7 +747,7 @@ setMessages(docs);setLoading(false);
   if(!ok)return;
   setPendingDeleteId(messageId);
   try{ await cascadeMessage(conversationId,messageId);toast("success","Message deleted."); }
-  catch(x:any){setErr(x.message||"Unable to delete message");toast("error",x.message||"Unable to delete message");}
+  catch(x:any){setErr(fail(toast,x,"Unable to delete message"));}
   finally{setPendingDeleteId(null);}
  }
 
@@ -666,7 +760,7 @@ setMessages(docs);setLoading(false);
   if(!ok)return;
   setDeletingVisitor(true);
   try{ await cascadeConversation(conversationId);toast("success","Visitor deleted."); }
-  catch(x:any){setErr(x.message||"Unable to delete visitor");toast("error",x.message||"Unable to delete visitor");setDeletingVisitor(false);}
+  catch(x:any){setErr(fail(toast,x,"Unable to delete visitor"));setDeletingVisitor(false);}
  }
 
  const shownMessages=(!previewCount||showAllMessages)?messages:messages.slice(Math.max(0,messages.length-previewCount));
@@ -677,7 +771,7 @@ setMessages(docs);setLoading(false);
    {viewerRole==="owner"&&<SpinnerButton className="spts-ghost" busy={deletingVisitor} busyLabel="Deleting…" onClick={deleteVisitor}>Delete visitor</SpinnerButton>}
   </div>
   {loading&&<p className="spts-muted">Loading…</p>}
-  {err&&<p className="spts-error">{err}</p>}
+  {err&&<p className="spts-error"><ErrText text={err}/></p>}
   {!loading&&messages.length===0&&<p className="spts-muted">No messages in this conversation.</p>}
   {previewCount&&hiddenCount>0&&<button type="button" className="spts-see-more" onClick={()=>setShowAllMessages(true)}>See {hiddenCount} earlier message{hiddenCount===1?"":"s"}</button>}
   {shownMessages.map(m=><div className="spts-message" key={m.id}>
@@ -756,7 +850,7 @@ function VisitorChat({conversationId}:{conversationId:string}){
     catch{ out[m.id]="[unable to decrypt]"; }
    }));
    setDec(out);
-  },e=>{setErr(e.message);setLoading(false)});
+  },e=>{setErr(accessText(e,ACCESS_GENERIC));setLoading(false)});
  },[conversationId]);
 
  // keep the newest message in view
@@ -771,13 +865,13 @@ function VisitorChat({conversationId}:{conversationId:string}){
   if(!ok)return;
   setPendingDeleteId(messageId);
   try{ await cascadeMessage(conversationId,messageId);toast("success","Message deleted."); }
-  catch(x:any){setErr(x.message||"Unable to delete message");toast("error",x.message||"Unable to delete message");}
+  catch(x:any){setErr(fail(toast,x,"Unable to delete message"));}
   finally{setPendingDeleteId(null);}
  }
 
  return <div className="spts-chat-thread" ref={boxRef}>
   {loading&&<p className="spts-muted">Loading…</p>}
-  {err&&<p className="spts-error">{err}</p>}
+  {err&&<p className="spts-error"><ErrText text={err}/></p>}
   {!loading&&!err&&messages.length===0&&<p className="spts-muted spts-chat-empty">No messages yet.</p>}
   {messages.map(m=><ChatExchange key={m.id} conversationId={conversationId} message={m} text={dec[m.id]}
    deleting={pendingDeleteId===m.id} onDelete={()=>deleteMessage(m.id)} onUpdate={()=>setTick(t=>t+1)}/>)}
@@ -791,13 +885,13 @@ function Messages({user}:{user:User}){
  const [conversations,setConversations]=useState<any[]>([]),[loading,setLoading]=useState(true),[err,setErr]=useState("");
  useEffect(()=>{
   const q=query(collection(profileDb,"conversations"),where("profileOwnerId","==",user.uid));
-  return onSnapshot(q,s=>{setConversations(s.docs.map(d=>({id:d.id,...d.data()} as any)));setLoading(false)},e=>{setErr(e.message);setLoading(false)});
+  return onSnapshot(q,s=>{setConversations(s.docs.map(d=>({id:d.id,...d.data()} as any)));setLoading(false)},e=>{setErr(accessText(e,ACCESS_GENERIC));setLoading(false)});
  },[user.uid]);
  return <section className="spts-card">
   <div className="spts-card-head"><h2>Inbox</h2><span className="spts-badge">{conversations.length}</span></div>
   <AutoDeleteNotice text="Messages and replies auto-delete 24h after they're sent."/>
   {loading&&<p className="spts-muted">Loading messages…</p>}
-  {err&&<p className="spts-error">Couldn't load messages: {err}</p>}
+  {err&&<p className="spts-error">Couldn't load messages: <ErrText text={err}/></p>}
   {!loading&&!err&&conversations.length===0&&<p className="spts-muted">No messages yet. Anyone who visits your public profile can send you one.</p>}
   {conversations.map(c=><ConversationThread key={c.id} conversationId={c.id} visitorId={c.visitorId||c.id}/>)}
  </section>;
@@ -814,6 +908,7 @@ function Dashboard({user}:{user:User}){
   [err,setErr]=useState(""),[editing,setEditing]=useState(true),[loadingProfile,setLoadingProfile]=useState(true);
  const [savingProfile,setSavingProfile]=useState(false);
  const [deletingProfile,setDeletingProfile]=useState(false);
+ const [flagged,setFlagged]=useState(false); // signed-in UID not found in its profile: restricted account
  const [addingPost,setAddingPost]=useState(false);
  const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false);
  const confirm=useConfirm();const toast=useToast();
@@ -821,24 +916,26 @@ function Dashboard({user}:{user:User}){
  const locked=!!profile; // after initial setup: bio + any still-empty optional fields are editable
  const fieldLocked=(v:any)=>locked&&!!String(v??"").trim(); // a field that already has a value is locked
  // Profile and inbox stay hidden until asked for — except a brand-new user, who needs the create form.
- useEffect(()=>{if(!loadingProfile&&!profile)setProfileOpen(true);},[loadingProfile,profile]);
+ useEffect(()=>{if(!loadingProfile&&!profile&&!flagged)setProfileOpen(true);},[loadingProfile,profile,flagged]);
 
  useEffect(()=>{(async()=>{
   try{
-   const us=await getDoc(doc(profileDb,"users",user.uid));
-   if(us.exists()){
-    const p=await getDoc(doc(profileDb,"profiles",us.data().username));
-    if(p.exists()){const d=p.data();setProfile(d);setU(d.username);setName(d.displayName);setBio(d.bio);setPhoto(d.photoUrl);setWeb(d.websiteUrl);setEmail(d.email);setPhone(d.phone);setEditing(false)}
-   }
-  }catch(x:any){setErr(x.message||"Unable to load profile");toast("error",x.message||"Unable to load profile");}
+   // Runs every time the dashboard opens: the signed-in UID must be found in its profile.
+   const st=await checkAccount(user);
+   if(st.state==="ok"){const d=st.profile;setProfile(d);setU(d.username);setName(d.displayName);setBio(d.bio);setPhoto(d.photoUrl);setWeb(d.websiteUrl);setEmail(d.email);setPhone(d.phone);setEditing(false)}
+  }catch(x:any){
+   if(isFlagged(x))setFlagged(true);
+   else setErr(fail(toast,x,"Unable to load profile"));
+  }
   setLoadingProfile(false);
  })();
  const q=query(collection(profileDb,"posts"),where("ownerId","==",user.uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
- return onSnapshot(q,s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(e.message));
+ return onSnapshot(q,s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(accessText(e,ACCESS_GENERIC)));
  },[user.uid]);
 
  async function save(e:React.FormEvent){
   e.preventDefault();
+  if(flagged)return; // restricted account: no profile changes
   if(profile){ // profile already set up: update the bio only
    setErr("");setSavingProfile(true);
    try{
@@ -850,7 +947,7 @@ function Dashboard({user}:{user:User}){
     if(!fieldLocked(profile.phone)&&((phone||"").trim()))changes.phone=(phone||"").trim();
     await setDoc(doc(profileDb,"profiles",profile.username),{...changes,updatedAt:serverTimestamp()},{merge:true});
     setProfile((prev:any)=>({...prev,...changes}));setEditing(false);toast("success","Profile saved.");
-   }catch(x:any){setErr(x.message||"Unable to save profile");toast("error",x.message||"Unable to save profile");}
+   }catch(x:any){setErr(fail(toast,x,"Unable to save profile"));}
    finally{setSavingProfile(false);}
    return;
   }
@@ -865,7 +962,7 @@ function Dashboard({user}:{user:User}){
    await setDoc(doc(profileDb,"profiles",x),p,{merge:true});
    await setDoc(doc(profileDb,"users",user.uid),{username:x,updatedAt:serverTimestamp()},{merge:true});
    setProfile((prev:any)=>({...prev,...p}));setEditing(false);toast("success","Profile saved.");
-  }catch(x:any){setErr(x.message||"Unable to save profile");toast("error",x.message||"Unable to save profile");}
+  }catch(x:any){setErr(fail(toast,x,"Unable to save profile"));}
   finally{setSavingProfile(false);}
  }
 
@@ -893,11 +990,11 @@ function Dashboard({user}:{user:User}){
    const postRef=await addDoc(collection(profileDb,"posts"),{ownerId:user.uid,mediaUrl,mediaType,caption:caption.trim(),createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
    scheduleAutoDelete({kind:"post",postId:postRef.id});
    setUrl("");setCaption("");setFile(null);toast("success","Post added — it auto-deletes in 24h on this device.");
-  }catch(x:any){setErr(x.message||"Unable to add post");toast("error",x.message||"Unable to add post");}
+  }catch(x:any){setErr(fail(toast,x,"Unable to add post"));}
   finally{setAddingPost(false);}
  }
 
- async function deletePost(postId:string){ try{await cascadePost(postId);}catch(x:any){setErr(x.message||"Unable to delete post");toast("error",x.message||"Unable to delete post");throw x;} }
+ async function deletePost(postId:string){ try{await cascadePost(postId);}catch(x:any){setErr(fail(toast,x,"Unable to delete post"));throw x;} }
 
  async function deleteProfileOnly(){
   if(!profile)return;
@@ -923,18 +1020,23 @@ function Dashboard({user}:{user:User}){
    await deleteDoc(doc(profileDb,"users",user.uid));
    setProfile(null);setU("");setName("");setBio("");setPhoto("");setWeb("");setEmail("");setPhone("");setEditing(true);
    toast("success","Profile deleted.");
-  }catch(x:any){setErr(x.message||"Unable to delete profile");toast("error",x.message||"Unable to delete profile");}
+  }catch(x:any){setErr(fail(toast,x,"Unable to delete profile"));}
   finally{setDeletingProfile(false);}
  }
 
  return <main className="spts-page"><header><h1>Dashboard</h1><button className="spts-ghost" onClick={()=>signOut(profileAuth)}>Log out</button></header>
 
  <div className="spts-dash-actions">
-  <button type="button" aria-expanded={profileOpen} onClick={()=>setProfileOpen(o=>!o)}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>
+  {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setProfileOpen(o=>!o)}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
   <button type="button" aria-expanded={inboxOpen} onClick={()=>setInboxOpen(o=>!o)}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
  </div>
 
- {profileOpen&&<section className="spts-card">
+ {flagged&&<section className="spts-card">
+  <div className="spts-card-head"><h2>Account restricted</h2></div>
+  <AccountFlagNotice uid={user.uid}/>
+ </section>}
+
+ {profileOpen&&!flagged&&<section className="spts-card">
   <div className="spts-card-head">
    <h2>Profile</h2>
    <div className="spts-card-head-badges">
@@ -1004,7 +1106,7 @@ function Dashboard({user}:{user:User}){
   </>}
  </section>
 
- {err&&<p className="spts-error">{err}</p>}</main>
+ {err&&<p className="spts-error"><ErrText text={err}/></p>}</main>
 }
 
 /* ------------------------------------------------------------------ *
@@ -1026,8 +1128,8 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   setP(s.data());
   prefetchAd(s.data().username||normalizeUsername(username)); // so "See portfolio" opens instantly
   const q=query(collection(profileDb,"posts"),where("ownerId","==",s.data().uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
-  onSnapshot(q,x=>setPosts(x.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(e.message));
- }catch(x:any){setErr(x.message||"Unable to load profile");toast("error",x.message||"Unable to load profile");}})()},[username]);
+  onSnapshot(q,x=>setPosts(x.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(accessText(e,ACCESS_GENERIC)));
+ }catch(x:any){setErr(fail(toast,x,"Unable to load profile"));}})()},[username]);
 
  async function send(){
   setErr("");
@@ -1046,7 +1148,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    const messageRef=await addDoc(collection(cr,"messages"),{senderId:visitor,ciphertext:e.ciphertext,time:e.time,deviceId:e.deviceId,iv:e.iv,createdAt:serverTimestamp()});
    scheduleAutoDelete({kind:"message",conversationId:cid,messageId:messageRef.id});
    setMsg("");setCount(count+1);
-  }catch(x:any){setErr(x.message||"Unable to send");toast("error",x.message||"Unable to send");}
+  }catch(x:any){setErr(fail(toast,x,"Unable to send"));}
   finally{setSending(false);}
  }
 
@@ -1059,7 +1161,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   if(!ok)return;
   setPendingDeleteId(postId);
   try{ await cascadePost(postId);toast("success","Post deleted."); }
-  catch(x:any){toast("error",x.message||"Unable to delete post");}
+  catch(x:any){fail(toast,x,"Unable to delete post");}
   finally{setPendingDeleteId(null);}
  }
  if(notFound)return <main className="spts-public"><div className="spts-public-status"><h1>Profile not found</h1><p className="spts-muted">This username doesn't have a public profile.</p><a className="spts-ghost spts-link-btn" href="/profiles">Get your own profile</a></div></main>;
@@ -1123,7 +1225,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
      <SpinnerButton className="spts-chat-send" busy={sending} busyLabel="" onClick={send} disabled={!msg.trim()} title="Send">➤</SpinnerButton>
     </div>
     <div className="spts-chat-foot"><span>{MIN_MESSAGE}–{MAX_MESSAGE} chars</span><span>{msg.length}/{MAX_MESSAGE}</span></div>
-    {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{err}</span></div>}
+    {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span><ErrText text={err}/></span></div>}
    </section>
   </div>}
  </section>
@@ -1171,26 +1273,39 @@ async function openUpgrade(email:string,blob:string):Promise<UpgradeRec>{
 
 async function beginUpgrade(user:User){
  if(!user.email)throw new Error("Your account has no email address.");
- const us=await getDoc(doc(profileDb,"users",user.uid));
- if(!us.exists())throw new Error("Create your public profile first, then upgrade.");
+ const uname=await requireLinkedProfile(user);
  const d=new Date(),p=(n:number)=>String(n).padStart(2,"0");
- const rec:UpgradeRec={u:us.data().username,t:`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,at:Date.now()};
+ const rec:UpgradeRec={u:uname,t:`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,at:Date.now()};
  const blob=await sealUpgrade(user.email,rec);
  await setDoc(doc(profileDb,"upgradeintents",user.uid),{blob,createdAt:serverTimestamp()});
  localStorage.setItem(UPGRADE_CACHE_KEY+user.uid,JSON.stringify(rec));
+ noteAccessError(null);
  window.location.assign(`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email)}`);
 }
 
 // Every upgrade button in the app.
 function UpgradeButton({user,className}:{user:User;className?:string}){
- const [busy,setBusy]=useState(false);
+ const [busy,setBusy]=useState(false),[flagged,setFlagged]=useState(false);
  const toast=useToast();
  async function go(){
   setBusy(true);
   try{ await beginUpgrade(user); } // navigates away on success
-  catch(x:any){ toast("error",x.message||"Couldn't start the upgrade. Please try again."); setBusy(false); }
+  catch(x:any){
+   setBusy(false);
+   if(isFlagged(x)){setFlagged(true);return;}
+   fail(toast,x,"Couldn't start the upgrade. Please try again.");
+  }
  }
- return <SpinnerButton className={`spts-upgrade-btn${className?" "+className:""}`} busy={busy} busyLabel="Please wait…" onClick={go}>Upgrade to Premium</SpinnerButton>;
+ return <>
+  <SpinnerButton className={`spts-upgrade-btn${className?" "+className:""}`} busy={busy} busyLabel="Please wait…" onClick={go}>Upgrade to Premium</SpinnerButton>
+  {flagged&&<div className="spts-modal-backdrop" role="dialog" aria-modal="true" onClick={()=>setFlagged(false)}>
+   <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
+    <h3 className="spts-modal-title">Account restricted</h3>
+    <div className="spts-modal-body"><AccountFlagNotice uid={user.uid}/></div>
+    <div className="spts-modal-actions"><button type="button" className="spts-ghost" onClick={()=>setFlagged(false)}>Close</button></div>
+   </div>
+  </div>}
+ </>;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1199,6 +1314,8 @@ function UpgradeButton({user,className}:{user:User;className?:string}){
  * ------------------------------------------------------------------ */
 function UpgradeSuccess({user}:{user:User|null}){
  const [status,setStatus]=useState<"working"|"done"|"error">("working");
+ // plain = our own message; retry = first Firebase access error; support = same access error repeated; flagged = UID not linked to a profile
+ const [errKind,setErrKind]=useState<"plain"|"retry"|"support"|"flagged">("plain");
  const [err,setErr]=useState("");
  const ran=useRef(false);
  const toast=useToast();
@@ -1209,9 +1326,7 @@ function UpgradeSuccess({user}:{user:User|null}){
   ran.current=true;
   try{
    if(!user.email)throw new Error("Your account has no email address.");
-   const us=await getDoc(doc(profileDb,"users",user.uid));
-   if(!us.exists())throw new Error("Create your public profile first, then upgrade.");
-   const uname:string=us.data().username;
+   const uname=await requireLinkedProfile(user);
 
    const intentRef=doc(profileDb,"upgradeintents",user.uid);
    const [snap,cachedRaw]=[await getDoc(intentRef),localStorage.getItem(UPGRADE_CACHE_KEY+user.uid)];
@@ -1229,9 +1344,17 @@ function UpgradeSuccess({user}:{user:User|null}){
    // single use
    try{ await deleteDoc(intentRef); }catch{}
    try{ localStorage.removeItem(UPGRADE_CACHE_KEY+user.uid); }catch{}
+   noteAccessError(null);
    setStatus("done");
    toast("success","You're upgraded to Premium.");
-  }catch(x:any){setStatus("error");setErr(x.message||"Unable to confirm your upgrade.");toast("error",x.message||"Unable to confirm your upgrade.");}
+  }catch(x:any){
+   setStatus("error");
+   if(isFlagged(x)){noteAccessError(null);setErrKind("flagged");return;}
+   const code=firebaseAccessCode(x);
+   if(code){setErrKind(noteAccessError(code)?"support":"retry");setErr(ACCESS_GENERIC);toast("error",ACCESS_GENERIC);return;}
+   noteAccessError(null);
+   setErrKind("plain");setErr(fail(toast,x,"Unable to confirm your upgrade."));
+  }
  })();},[user]);
 
  return <main className="spts-page"><section className="spts-card spts-upgrade-confirm">
@@ -1241,10 +1364,16 @@ function UpgradeSuccess({user}:{user:User|null}){
    <p className="spts-muted">Your premium public-profile theme, direct file uploads and portfolio are unlocked.</p>
    <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
   </>}
-  {status==="error"&&<>
+  {status==="error"&&errKind==="flagged"&&<>
+   <h2>Account restricted</h2>
+   <AccountFlagNotice uid={user?.uid}/>
+   <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
+  </>}
+  {status==="error"&&errKind!=="flagged"&&<>
    <h2>Couldn't confirm your upgrade</h2>
-   <p className="spts-error">{err}</p>
-   <p className="spts-muted">Already paid? <a className="spts-link" href={supportUrl("Hi, I paid for Premium but the upgrade didn't confirm.")} target="_blank" rel="noreferrer">Contact support</a>.</p>
+   <p className="spts-error"><ErrText text={err}/></p>
+   {errKind==="retry"&&<button type="button" onClick={()=>window.location.reload()}>Try again</button>}
+   {errKind!=="retry"&&<p className="spts-muted">{errKind==="support"?"Still not working? ":""}Already paid? <a className="spts-link" href={supportUrl("Hi, I paid for Premium but the upgrade didn't confirm.")} target="_blank" rel="noreferrer">Contact support</a>.</p>}
    <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
   </>}
  </section></main>;
@@ -1437,7 +1566,7 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
    writeLastReq(user.uid,{startDate:start,endDate:end,createdMs:Date.now()});
    toast("success","Portfolio request sent.");
    onSent();
-  }catch(x:any){setErr(x.message||"Unable to send request");toast("error",x.message||"Unable to send request");}
+  }catch(x:any){setErr(fail(toast,x,"Unable to send request"));}
   finally{setSending(false);}
  }
 
@@ -1459,7 +1588,7 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
      <label>Start date<input required type="date" min={today} value={start} onChange={e=>setStart(e.target.value)} disabled={sending}/></label>
     </div>
     <label>End date (automatic)<input readOnly tabIndex={-1} className="spts-adform-readonly" value={end?prettyDate(end):""} placeholder="Pick a start date"/></label>
-    {err&&<p className="spts-error" role="alert">{err}</p>}
+    {err&&<p className="spts-error" role="alert"><ErrText text={err}/></p>}
     <div className="spts-modal-actions">
      <button type="button" className="spts-ghost" onClick={onClose} disabled={sending}>Cancel</button>
      <SpinnerButton type="submit" busy={sending} busyLabel="Sending…">Send request</SpinnerButton>
@@ -1538,7 +1667,7 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
 function AdView({username,user,authLoading}:{username:string;user:User|null;authLoading:boolean}){
  const uname=normalizeUsername(username);
  const [ad,setAd]=useState<AdDoc|null>(()=>typeof window!=="undefined"?readAdCache(uname):null);
- const [settled,setSettled]=useState(false),[failed,setFailed]=useState(false),[tries,setTries]=useState(0);
+ const [settled,setSettled]=useState(false),[failed,setFailed]=useState(false),[failedText,setFailedText]=useState(ACCESS_GENERIC),[tries,setTries]=useState(0);
  const [copied,setCopied]=useState(false);
  const toast=useToast();
  async function copyLink(){
@@ -1556,8 +1685,9 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
    writeAdCache(uname,a);
    setAd(prev=>sameAd(prev,a)?prev:a); // unchanged ad => no iframe reload
    setSettled(true);
-  }).catch(()=>{
+  }).catch((e:any)=>{
    if(!alive)return;
+   setFailedText(accessText(e,ACCESS_GENERIC)===ACCESS_PERSIST?ACCESS_PERSIST:ACCESS_GENERIC);
    setFailed(true);setSettled(true); // permission denied, offline, etc.
   });
   return ()=>{alive=false};
@@ -1585,7 +1715,7 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
   </div>}
   {!live&&settled&&failed&&<div className="spts-public-status">
    <h1>Couldn't load the portfolio</h1>
-   <p className="spts-muted">Access was denied or the connection failed. Please try again.</p>
+   <p className="spts-muted"><ErrText text={failedText}/></p>
    <button type="button" onClick={()=>{setSettled(false);setTries(t=>t+1);}}>Try again</button>
   </div>}
  </main>;
