@@ -674,7 +674,8 @@ function Dashboard({user}:{user:User}){
  const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false);
  const confirm=useConfirm();const toast=useToast();
  const isPremium=!!profile?.premium;
- const locked=!!profile; // after initial setup only the bio is editable
+ const locked=!!profile; // after initial setup: bio + any still-empty optional fields are editable
+ const fieldLocked=(v:any)=>locked&&!!String(v??"").trim(); // a field that already has a value is locked
  // Profile and inbox stay hidden until asked for — except a brand-new user, who needs the create form.
  useEffect(()=>{if(!loadingProfile&&!profile)setProfileOpen(true);},[loadingProfile,profile]);
 
@@ -697,9 +698,15 @@ function Dashboard({user}:{user:User}){
   if(profile){ // profile already set up: update the bio only
    setErr("");setSavingProfile(true);
    try{
-    await setDoc(doc(profileDb,"profiles",profile.username),{bio:bio.trim(),updatedAt:serverTimestamp()},{merge:true});
-    setProfile((prev:any)=>({...prev,bio:bio.trim()}));setEditing(false);toast("success","Bio saved.");
-   }catch(x:any){setErr(x.message||"Unable to save bio");toast("error",x.message||"Unable to save bio");}
+    const changes:Record<string,string>={bio:bio.trim()};
+    // Optional fields left empty at setup can be filled in once; filled ones never change.
+    if(!fieldLocked(profile.photoUrl)&&((photo||"").trim()))changes.photoUrl=(photo||"").trim();
+    if(!fieldLocked(profile.websiteUrl)&&((web||"").trim()))changes.websiteUrl=(web||"").trim();
+    if(!fieldLocked(profile.email)&&((email||"").trim()))changes.email=(email||"").trim();
+    if(!fieldLocked(profile.phone)&&((phone||"").trim()))changes.phone=(phone||"").trim();
+    await setDoc(doc(profileDb,"profiles",profile.username),{...changes,updatedAt:serverTimestamp()},{merge:true});
+    setProfile((prev:any)=>({...prev,...changes}));setEditing(false);toast("success","Profile saved.");
+   }catch(x:any){setErr(x.message||"Unable to save profile");toast("error",x.message||"Unable to save profile");}
    finally{setSavingProfile(false);}
    return;
   }
@@ -813,15 +820,15 @@ function Dashboard({user}:{user:User}){
   </div>}
 
   {!loadingProfile&&editing&&<form onSubmit={save}>
-   {locked&&<p className="spts-muted">Only your bio can be edited. To change anything else,{" "}
+   {locked&&<p className="spts-muted">Only your bio and empty fields can be edited. To change filled fields,{" "}
     <a className="spts-link" href={supportUrl(`Hi, I'd like to change my profile details. Username: @${profile.username}`)} target="_blank" rel="noreferrer">contact support</a>.</p>}
    <label>Username<input required={!locked} readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="yourname" value={u} onChange={e=>setU(e.target.value)} disabled={savingProfile}/></label>
    <label>Display name<input required={!locked} readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} disabled={savingProfile}/></label>
    <label>Bio<textarea maxLength={1000} placeholder="Tell visitors about yourself" value={bio} onChange={e=>setBio(e.target.value)} disabled={savingProfile}/></label>
-   <label>Profile photo URL<input readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="https://…" value={photo} onChange={e=>setPhoto(e.target.value)} disabled={savingProfile}/></label>
-   <label>Website URL<input readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="https://…" value={web} onChange={e=>setWeb(e.target.value)} disabled={savingProfile}/></label>
-   <label>Public email<input type="email" readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="Shown on your public profile" value={email} onChange={e=>setEmail(e.target.value)} disabled={savingProfile}/></label>
-   <label>Public phone<input readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="Shown on your public profile" value={phone} onChange={e=>setPhone(e.target.value)} disabled={savingProfile}/></label>
+   <label>Profile photo URL<input readOnly={fieldLocked(profile?.photoUrl)} className={fieldLocked(profile?.photoUrl)?"spts-readonly":undefined} placeholder="https://…" value={photo} onChange={e=>setPhoto(e.target.value)} disabled={savingProfile}/></label>
+   <label>Website URL<input readOnly={fieldLocked(profile?.websiteUrl)} className={fieldLocked(profile?.websiteUrl)?"spts-readonly":undefined} placeholder="https://…" value={web} onChange={e=>setWeb(e.target.value)} disabled={savingProfile}/></label>
+   <label>Public email<input type="email" readOnly={fieldLocked(profile?.email)} className={fieldLocked(profile?.email)?"spts-readonly":undefined} placeholder="Shown on your public profile" value={email} onChange={e=>setEmail(e.target.value)} disabled={savingProfile}/></label>
+   <label>Public phone<input readOnly={fieldLocked(profile?.phone)} className={fieldLocked(profile?.phone)?"spts-readonly":undefined} placeholder="Shown on your public profile" value={phone} onChange={e=>setPhone(e.target.value)} disabled={savingProfile}/></label>
    <div className="spts-form-actions">
     <SpinnerButton type="submit" busy={savingProfile} busyLabel="Saving…">{profile?"Save changes":"Create profile"}</SpinnerButton>
     {profile&&<button type="button" className="spts-ghost" onClick={cancelEdit} disabled={savingProfile}>Cancel</button>}
