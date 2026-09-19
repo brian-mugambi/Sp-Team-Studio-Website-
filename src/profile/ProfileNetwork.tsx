@@ -115,8 +115,8 @@ async function requireLinkedProfile(user:User):Promise<string>{
 }
 
 // Edit these two lists to match what really is / isn't affected.
-const FLAG_AFFECTED=["Your public profile page (it may not show or update)","Editing or managing your profile","Posts, and messaging through public profile","Premium upgrade and some features"];
-const FLAG_STILL_OK=["Logging in and out","Viewing other people's public profiles","Sending messages and comments on other profiles","Your profile and portfolio"];
+const FLAG_AFFECTED=["Editing or managing your profile","Posts, and messaging through public profile","Premium upgrade and some features"];
+const FLAG_STILL_OK=["Logging in and out","Viewing other people's public profiles","Sending messages and comments on other profiles","Your public profile and portfolio"];
 function AccountFlagNotice({uid,showSupport=true}:{uid?:string;showSupport?:boolean}){
  return <div className="spts-flag-notice" role="alert">
   <p>Your account is currently restricted, so some features may not work until it has been reviewed.</p>
