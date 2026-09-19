@@ -400,3 +400,8 @@ video.spts-media-el{cursor:pointer;}
 .spts-dash-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0;}
 .spts-conversation-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .spts-conversation-head button{padding:6px 10px;font-size:0.75rem;}
+
+/* Ad viewer bar: small, subtle buttons */
+.spts-ad-bar{gap:8px;padding:6px 10px;}
+.spts-ad-bar .spts-link-btn,.spts-ad-bar button{padding:4px 10px;font-size:0.72rem;border-radius:7px;opacity:0.7;transition:opacity .15s ease;}
+.spts-ad-bar .spts-link-btn:hover,.spts-ad-bar button:hover{opacity:1;}

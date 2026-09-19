@@ -1164,6 +1164,7 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
 
  async function submit(e:React.FormEvent){
   e.preventDefault();
+  if(!profile.premium)return setErr("Ads are for Premium users.");
   if(!name.trim())return setErr("Full name is required.");
   if(mobile.replace(/\D/g,"").length<7)return setErr("Enter a valid mobile number.");
   if(desc.trim().length<AD_MIN_DESC)return setErr(`Describe the ad in at least ${AD_MIN_DESC} characters.`);
@@ -1235,8 +1236,20 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
  </div>;
 }
 
-/* Dashboard card: one button, plus the ad's current state. */
+/* Dashboard card. Ads are Premium-only: everyone else sees an upgrade prompt. */
 function AdRequest({user,profile}:{user:User;profile:any}){
+ if(!profile.premium)return <section className="spts-card">
+  <div className="spts-card-head"><h2>Ad</h2><span className="spts-premium-tag spts-premium-tag-sm">✦ Premium</span></div>
+  <p className="spts-muted">Ads are for Premium users.</p>
+  <div className="spts-ad-actions">
+   <a className="spts-upgrade-btn" href={`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email||"")}`} target="_blank" rel="noreferrer">Upgrade to Premium</a>
+  </div>
+ </section>;
+ return <AdRequestCard user={user} profile={profile}/>;
+}
+
+// One button, plus the ad's current state.
+function AdRequestCard({user,profile}:{user:User;profile:any}){
  const [open,setOpen]=useState(false),[bump,setBump]=useState(0);
  const status=useAdStatus(user,profile.username,bump);
  const phase=status?.phase;
@@ -1269,11 +1282,15 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
  if(authLoading||(user&&loading))return <button type="button" disabled>Request ad</button>;
  if(!user)return <>
   <a className="spts-ad-link spts-ad-cta" href="/profiles">Request ad</a>
-  <p className="spts-muted">You'll create a profile first, then you can request an ad.</p>
+  <p className="spts-muted">Ads are Premium-only. Create a profile first, then upgrade.</p>
  </>;
  if(!profile)return <>
   <a className="spts-ad-link spts-ad-cta" href="/profiles">Create your profile</a>
-  <p className="spts-muted">You need a profile before you can request an ad.</p>
+  <p className="spts-muted">Ads are Premium-only. You need a profile first.</p>
+ </>;
+ if(!profile.premium)return <>
+  <a className="spts-upgrade-btn spts-ad-link" href={`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email||"")}`} target="_blank" rel="noreferrer">Upgrade to Premium</a>
+  <p className="spts-muted">Ads are for Premium users.</p>
  </>;
  return <>
   <button type="button" onClick={()=>setOpen(true)}>Request ad</button>
@@ -1289,6 +1306,14 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  const uname=normalizeUsername(username);
  const [ad,setAd]=useState<AdDoc|null>(()=>typeof window!=="undefined"?readAdCache(uname):null);
  const [settled,setSettled]=useState(false),[failed,setFailed]=useState(false),[tries,setTries]=useState(0);
+ const [copied,setCopied]=useState(false);
+ const toast=useToast();
+ async function copyLink(){
+  try{
+   await navigator.clipboard.writeText(`${location.origin}/profile/${uname}/ad`);
+   setCopied(true);setTimeout(()=>setCopied(false),2000);
+  }catch{ toast("error","Couldn't copy the link."); }
+ }
 
  useEffect(()=>{
   let alive=true;
@@ -1310,6 +1335,7 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  return <main className="spts-ad">
   <header className="spts-ad-bar">
    <a className="spts-ghost spts-link-btn" href={`/profile/${uname}`}>← @{uname}</a>
+   <button type="button" className="spts-ghost" onClick={copyLink}>{copied?"✓ Copied":"Copy link"}</button>
   </header>
   {live&&<iframe
    className="spts-ad-frame"
