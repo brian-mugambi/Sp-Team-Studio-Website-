@@ -10,7 +10,7 @@ import "./profile.css";
 /* ------------------------------------------------------------------ *
  * Premium — Firebase Storage reuses the same app as profileAuth, so
  * no change to the firebase config file is needed. The Paystack link
- * below is a placeholder: swap it for your real Payment Page link
+ * below is a real Payment Page link
  * (or generate one per-user server-side later if you want a reference
  * tied to the visit). Paystack is configured to redirect back to
  * "<your site>/profile/" after a successful
@@ -25,7 +25,7 @@ const PAYSTACK_UPGRADE_URL="https://paystack.shop/pay/bv5n43khmv";
  * wa.me needs the number in international format, so set SUPPORT_COUNTRY_CODE
  * (digits only, e.g. "234" or "60") — it replaces the leading 0 of the local number. */
 const SUPPORT_WHATSAPP="0182322555";
-const SUPPORT_COUNTRY_CODE="";
+const SUPPORT_COUNTRY_CODE="254";
 function supportUrl(text:string){
  const local=SUPPORT_WHATSAPP.replace(/\D/g,"");
  const intl=SUPPORT_COUNTRY_CODE?SUPPORT_COUNTRY_CODE+local.replace(/^0+/,""):local;
