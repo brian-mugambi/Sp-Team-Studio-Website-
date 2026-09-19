@@ -939,7 +939,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   const s=await getDoc(doc(profileDb,"profiles",normalizeUsername(username)));
   if(!s.exists()){setNotFound(true);return;}
   setP(s.data());
-  prefetchAd(s.data().username||normalizeUsername(username)); // so "See ad" opens instantly
+  prefetchAd(s.data().username||normalizeUsername(username)); // so "See portfolio" opens instantly
   const q=query(collection(profileDb,"posts"),where("ownerId","==",s.data().uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
   onSnapshot(q,x=>setPosts(x.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(e.message));
  }catch(x:any){setErr(x.message||"Unable to load profile");toast("error",x.message||"Unable to load profile");}})()},[username]);
@@ -1006,7 +1006,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    <button type="button" aria-expanded={msgOpen} onClick={()=>setMsgOpen(o=>!o)}>{msgOpen?"Close":"Message"}</button>
   </div>
   <div className="spts-profile-hero-actions spts-hero-actions-2">
-   <a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`}>See ad</a>
+   <a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`}>See portfolio</a>
    <button type="button" className="spts-ghost" onClick={shareProfile}>{copied?"✓ Link copied":"Share profile"}</button>
    <a className="spts-ghost spts-link-btn" href="/profiles">Get your own profile</a>
   </div>
@@ -1084,7 +1084,7 @@ function UpgradeSuccess({user}:{user:User|null}){
 }
 
 /* ------------------------------------------------------------------ *
- * Ads
+ * Portfolio (internal names, the /ad route and Firestore paths still say "ad")
  *
  * Firestore layout:
  *   profiles/{username}/ad/code          -> { html, startDate?, endDate? }
@@ -1141,7 +1141,7 @@ async function fetchAd(u:string):Promise<AdDoc|null>{
  const s=await getDoc(doc(profileDb,"profiles",u,"ad","code"));
  return s.exists()?parseAd(s.data()):null;
 }
-// Warm the cache (used by the public profile so "See ad" opens instantly).
+// Warm the cache (used by the public profile so "See portfolio" opens instantly).
 function prefetchAd(u:string){ fetchAd(u).then(a=>writeAdCache(u,a)).catch(()=>{}); }
 
 // Last request the owner made — the "waiting period" is derived from it.
@@ -1230,10 +1230,10 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
 
  async function submit(e:React.FormEvent){
   e.preventDefault();
-  if(!profile.premium)return setErr("Ads are for Premium users.");
+  if(!profile.premium)return setErr("Portfolio is for Premium users.");
   if(!name.trim())return setErr("Full name is required.");
   if(mobile.replace(/\D/g,"").length<7)return setErr("Enter a valid mobile number.");
-  if(desc.trim().length<AD_MIN_DESC)return setErr(`Describe the ad in at least ${AD_MIN_DESC} characters.`);
+  if(desc.trim().length<AD_MIN_DESC)return setErr(`Describe the portfolio in at least ${AD_MIN_DESC} characters.`);
   if(!start||start<today)return setErr("Pick a start date that is today or later.");
   setErr("");setSending(true);
   try{
@@ -1242,7 +1242,7 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
     method:"POST",
     headers:{"Content-Type":"application/json",Accept:"application/json"},
     body:JSON.stringify({
-     _subject:`Ad request from @${profile.username}`,
+     _subject:`Portfolio request from @${profile.username}`,
      _template:"table",
      _captcha:"false",
      email:user.email||"",
@@ -1254,7 +1254,7 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
      "End date":end,
      Username:`@${profile.username}`,
      "Profile link":`${origin}/profile/${profile.username}`,
-     "Ad link":`${origin}/profile/${profile.username}/ad`,
+     "Portfolio link":`${origin}/profile/${profile.username}/ad`,
     }),
    });
    const data:any=await res.json().catch(()=>({}));
@@ -1268,7 +1268,7 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
     });
    }catch{}
    writeLastReq(user.uid,{startDate:start,endDate:end,createdMs:Date.now()});
-   toast("success","Ad request sent.");
+   toast("success","Portfolio request sent.");
    onSent();
   }catch(x:any){setErr(x.message||"Unable to send request");toast("error",x.message||"Unable to send request");}
   finally{setSending(false);}
@@ -1276,12 +1276,12 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
 
  return <div className="spts-modal-backdrop" role="dialog" aria-modal="true" onClick={()=>{if(!sending)onClose();}}>
   <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
-   <h3 className="spts-modal-title">Request ad run</h3>
+   <h3 className="spts-modal-title">Request portfolio</h3>
    <form className="spts-adform" onSubmit={submit}>
     <label>Full name<input required value={name} onChange={e=>setName(e.target.value)} autoComplete="name" disabled={sending}/></label>
     <label>Mobile<input required type="tel" inputMode="tel" placeholder="+234…" value={mobile} onChange={e=>setMobile(e.target.value)} autoComplete="tel" disabled={sending}/></label>
     <label>Description
-     <textarea required maxLength={AD_MAX_DESC} placeholder="What is the ad for, and how should it look? e.g. launch event on the 12th, bold and colourful, with a book-tickets button." value={desc} onChange={e=>setDesc(e.target.value)} disabled={sending}/>
+     <textarea required maxLength={AD_MAX_DESC} placeholder="What should your portfolio show, and how should it look? e.g. my design work, dark and minimal, with a contact button." value={desc} onChange={e=>setDesc(e.target.value)} disabled={sending}/>
     </label>
     <div className="spts-adform-row">
      <label>Duration
@@ -1302,11 +1302,11 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
  </div>;
 }
 
-/* Dashboard card. Ads are Premium-only: everyone else sees an upgrade prompt. */
+/* Dashboard card. Portfolio is Premium-only: everyone else sees an upgrade prompt. */
 function AdRequest({user,profile}:{user:User;profile:any}){
  if(!profile.premium)return <section className="spts-card">
-  <div className="spts-card-head"><h2>Ad</h2><span className="spts-premium-tag spts-premium-tag-sm">✦ Premium</span></div>
-  <p className="spts-muted">Ads are for Premium users.</p>
+  <div className="spts-card-head"><h2>Portfolio</h2><span className="spts-premium-tag spts-premium-tag-sm">✦ Premium</span></div>
+  <p className="spts-muted">Portfolio is for Premium users.</p>
   <div className="spts-ad-actions">
    <a className="spts-upgrade-btn" href={`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email||"")}`} target="_blank" rel="noreferrer">Upgrade to Premium</a>
   </div>
@@ -1314,7 +1314,7 @@ function AdRequest({user,profile}:{user:User;profile:any}){
  return <AdRequestCard user={user} profile={profile}/>;
 }
 
-// One button, plus the ad's current state.
+// One button, plus the portfolio's current state.
 function AdRequestCard({user,profile}:{user:User;profile:any}){
  const [open,setOpen]=useState(false),[bump,setBump]=useState(0);
  const status=useAdStatus(user,profile.username,bump);
@@ -1324,47 +1324,47 @@ function AdRequestCard({user,profile}:{user:User;profile:any}){
  const range=(s?:string,e?:string)=>s&&e?`${prettyDate(s)} – ${prettyDate(e)}`:e?`until ${prettyDate(e)}`:s?`from ${prettyDate(s)}`:"";
 
  return <section className="spts-card">
-  <div className="spts-card-head"><h2>Ad</h2>{badge&&<span className="spts-badge">{badge}</span>}</div>
+  <div className="spts-card-head"><h2>Portfolio</h2>{badge&&<span className="spts-badge">{badge}</span>}</div>
   <p className="spts-muted">
-   {phase==="live"&&<>Your ad is live{status?.endDate?` until ${prettyDate(status.endDate)}`:""}. You can request again once it expires.</>}
-   {phase==="scheduled"&&<>Your ad is ready and goes live {status?.startDate?`on ${prettyDate(status.startDate)}`:"soon"}.</>}
-   {phase==="waiting"&&<>Request sent for {range(status?.startDate,status?.endDate)}. We're preparing your ad — it goes live once it's ready. You can send another request if something changed.</>}
-   {phase==="expired"&&<>Your last ad expired{status?.endDate?` on ${prettyDate(status.endDate)}`:""}. Request another run any time.</>}
-   {(phase==="none"||!phase)&&<>Get an ad at <a href={`/profile/${profile.username}/ad`}>/profile/{profile.username}/ad</a>.</>}
+   {phase==="live"&&<>Your portfolio is live{status?.endDate?` until ${prettyDate(status.endDate)}`:""}. You can request again once it expires.</>}
+   {phase==="scheduled"&&<>Your portfolio is ready and goes live {status?.startDate?`on ${prettyDate(status.startDate)}`:"soon"}.</>}
+   {phase==="waiting"&&<>Request sent for {range(status?.startDate,status?.endDate)}. We're preparing your portfolio — it goes live once it's ready. You can send another request if something changed.</>}
+   {phase==="expired"&&<>Your last portfolio expired{status?.endDate?` on ${prettyDate(status.endDate)}`:""}. Request another run any time.</>}
+   {(phase==="none"||!phase)&&<>Get a portfolio at <a href={`/profile/${profile.username}/ad`}>/profile/{profile.username}/ad</a>.</>}
   </p>
   <div className="spts-ad-actions">
-   <button type="button" disabled={blocked} onClick={()=>setOpen(true)}>Request ad run</button>
-   {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>See ad</a>}
+   <button type="button" disabled={blocked} onClick={()=>setOpen(true)}>Request portfolio</button>
+   {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>See portfolio</a>}
   </div>
   {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setBump(b=>b+1);}}/>}
  </section>;
 }
 
-// Shown on the public ad page when there is no live ad.
+// Shown on the public portfolio page when there is no live portfolio.
 function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
  const {loading,profile}=useOwnProfile(user);
  const [open,setOpen]=useState(false),[sent,setSent]=useState(false);
  if(sent)return <p className="spts-muted">Request sent — we'll be in touch soon.</p>;
- if(authLoading||(user&&loading))return <button type="button" disabled>Request ad</button>;
+ if(authLoading||(user&&loading))return <button type="button" disabled>Request portfolio</button>;
  if(!user)return <>
-  <a className="spts-ad-link spts-ad-cta" href="/profiles">Request ad</a>
-  <p className="spts-muted">Ads are Premium-only. Create a profile first, then upgrade.</p>
+  <a className="spts-ad-link spts-ad-cta" href="/profiles">Request portfolio</a>
+  <p className="spts-muted">Portfolio is Premium-only. Create a profile first, then upgrade.</p>
  </>;
  if(!profile)return <>
   <a className="spts-ad-link spts-ad-cta" href="/profiles">Create your profile</a>
-  <p className="spts-muted">Ads are Premium-only. You need a profile first.</p>
+  <p className="spts-muted">Portfolio is Premium-only. You need a profile first.</p>
  </>;
  if(!profile.premium)return <>
   <a className="spts-upgrade-btn spts-ad-link" href={`${PAYSTACK_UPGRADE_URL}?email=${encodeURIComponent(user.email||"")}`} target="_blank" rel="noreferrer">Upgrade to Premium</a>
-  <p className="spts-muted">Ads are for Premium users.</p>
+  <p className="spts-muted">Portfolio is for Premium users.</p>
  </>;
  return <>
-  <button type="button" onClick={()=>setOpen(true)}>Request ad</button>
+  <button type="button" onClick={()=>setOpen(true)}>Request portfolio</button>
   {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setSent(true);}}/>}
  </>;
 }
 
-// Public ad page. Runs the html string in a sandboxed iframe (no
+// Public portfolio page (route + Firestore names still say "ad"). Runs the html string in a sandboxed iframe (no
 // allow-same-origin), so the ad code can't reach this app's auth session,
 // storage or DOM. A cached copy renders on the very first paint (no loading
 // screen); Firestore then refreshes it silently.
@@ -1405,19 +1405,19 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
   </header>
   {live&&<iframe
    className="spts-ad-frame"
-   title={`Ad by @${uname}`}
+   title={`Portfolio by @${uname}`}
    srcDoc={ad!.html}
    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
    referrerPolicy="no-referrer"
   />}
   {!live&&!settled&&<div className="spts-ad-frame spts-ad-blank"/>}
   {!live&&settled&&!failed&&<div className="spts-public-status">
-   <h1>Ad not found</h1>
-   <p className="spts-muted">@{uname} has no ad live right now.</p>
+   <h1>Portfolio not found</h1>
+   <p className="spts-muted">@{uname} has no portfolio live right now.</p>
    <AdRequestCta user={user} authLoading={authLoading}/>
   </div>}
   {!live&&settled&&failed&&<div className="spts-public-status">
-   <h1>Couldn't load the ad</h1>
+   <h1>Couldn't load the portfolio</h1>
    <p className="spts-muted">Access was denied or the connection failed. Please try again.</p>
    <button type="button" onClick={()=>{setSettled(false);setTries(t=>t+1);}}>Try again</button>
   </div>}
@@ -1427,7 +1427,7 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
 /* ------------------------------------------------------------------ *
  * Root
  * ------------------------------------------------------------------ */
-export default function ProfileNetwork({username,view}:{username?:string;view?:"ad"}){
+export default function ProfileNetwork({username,view}:{username?:string;view?:"ad"|"portfolio"}){
  const [user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(true);
  useEffect(()=>onAuthStateChanged(profileAuth,u=>{setUser(u);setLoading(false)}),[]);
  useEffect(()=>{
@@ -1436,9 +1436,9 @@ export default function ProfileNetwork({username,view}:{username?:string;view?:"
   return ()=>clearInterval(id);
  },[]);
  // /profile/{username}/ad — pass view="ad" from your router, or let the path match below handle it.
- const adMatch=/^\/profile\/([^/]+)\/ad\/?$/.exec(typeof location!=="undefined"?location.pathname:"");
- const adUser=view==="ad"?username:adMatch?decodeURIComponent(adMatch[1]):undefined;
- // The ad page never waits for auth: the ad paints straight away, auth only matters for the "Request ad" button.
+ const adMatch=/^\/profile\/([^/]+)\/(?:ad|portfolio)\/?$/.exec(typeof location!=="undefined"?location.pathname:"");
+ const adUser=(view==="ad"||view==="portfolio")?username:adMatch?decodeURIComponent(adMatch[1]):undefined;
+ // The ad page never waits for auth: the ad paints straight away, auth only matters for the "Request portfolio" button.
  if(adUser)return <ToastHost><AdView key={adUser} username={adUser} user={user} authLoading={loading}/></ToastHost>;
  if(loading)return <main className="spts-page">Loading…</main>;
  return <ToastHost><ConfirmHost><ActiveVideoHost>
