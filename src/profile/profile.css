@@ -386,3 +386,9 @@ video.spts-media-el{cursor:pointer;}
 .spts-adform-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .spts-adform-readonly{opacity:0.75;cursor:default;}
 @media (max-width:420px){.spts-adform-row{grid-template-columns:1fr;}}
+
+/* Public profile: posts + message tucked inside the hero behind buttons */
+.spts-hero-actions-2{margin-top:10px;}
+.spts-hero-panel{width:100%;text-align:left;margin-top:8px;}
+.spts-hero-panel:first-of-type{margin-top:18px;}
+.spts-hero-panel .spts-card{margin:8px 0 0;}

@@ -800,6 +800,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
  const [showAllPosts,setShowAllPosts]=useState(false);
  const [copied,setCopied]=useState(false);
+ const [postsOpen,setPostsOpen]=useState(false),[msgOpen,setMsgOpen]=useState(false);
  const confirm=useConfirm();const toast=useToast();
 
  useEffect(()=>{(async()=>{try{
@@ -814,7 +815,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  async function send(){
   setErr("");
   if(!p)return;
-  if(!validMessage(msg))return setErr(`Message must be ${MIN_MESSAGE}-${MAX_MESSAGE} characters.`);
+  if(!validMessage(msg))return setErr(`Use ${MIN_MESSAGE}–${MAX_MESSAGE} characters.`);
   if(count>=MAX_MESSAGES)return setErr("Conversation limit reached.");
   setSending(true);
   try{
@@ -827,7 +828,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    if(isNewConversation)scheduleAutoDelete({kind:"conversation",conversationId:cid});
    const messageRef=await addDoc(collection(cr,"messages"),{senderId:visitor,ciphertext:e.ciphertext,time:e.time,deviceId:e.deviceId,iv:e.iv,createdAt:serverTimestamp()});
    scheduleAutoDelete({kind:"message",conversationId:cid,messageId:messageRef.id});
-   setMsg("");setCount(count+1);toast("success","Message sent — it auto-deletes in 24h on this device.");
+   setMsg("");setCount(count+1);toast("success","Sent · auto-deletes in 24h.");
   }catch(x:any){setErr(x.message||"Unable to send");toast("error",x.message||"Unable to send");}
   finally{setSending(false);}
  }
@@ -869,37 +870,43 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    {p.phone&&<a className="spts-meta-chip" href={`tel:${p.phone}`}>📞 Phone</a>}
   </div>}
   <div className="spts-profile-hero-actions">
+   <button type="button" aria-expanded={postsOpen} onClick={()=>setPostsOpen(o=>!o)}>{postsOpen?"Hide posts":"See posts"}</button>
+   <button type="button" aria-expanded={msgOpen} onClick={()=>setMsgOpen(o=>!o)}>{msgOpen?"Close":"Message"}</button>
+  </div>
+  <div className="spts-profile-hero-actions spts-hero-actions-2">
    <a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`}>See ad</a>
    <button type="button" className="spts-ghost" onClick={shareProfile}>{copied?"✓ Link copied":"Share profile"}</button>
    <a className="spts-ghost spts-link-btn" href="/profiles">Get your own profile</a>
   </div>
   <small className="spts-muted spts-contact-note">{contacts.urls.length+contacts.emails.length+contacts.phones.length} contact/link items detected in bio</small>
- </section>
+  {postsOpen&&<div className="spts-hero-panel">
+   <section className="spts-card spts-section">
+    <div className="spts-card-head"><h2>Posts</h2><span className="spts-badge">{posts.length}</span></div>
+    {posts.length===0&&<p className="spts-muted spts-empty-text">No posts yet.</p>}
+    <div className="spts-post-grid">
+     {visiblePosts.map(x=><PostCard key={x.id} post={x} user={user} canDeletePost={canDeletePosts} onDeletePost={()=>deletePost(x.id)}/>)}
+    </div>
+    {!showAllPosts&&hiddenPostCount>0&&<button type="button" className="spts-see-more" onClick={()=>setShowAllPosts(true)}>See {hiddenPostCount} more</button>}
+    {showAllPosts&&posts.length>POST_PREVIEW_COUNT&&<button type="button" className="spts-see-more spts-ghost" onClick={()=>setShowAllPosts(false)}>Show less</button>}
+   </section>
+  </div>}
+  {msgOpen&&<div className="spts-hero-panel">
+   <section className="spts-card spts-section spts-messagebox">
+    <div className="spts-card-head"><h2>Message</h2></div>
+    <p className="spts-muted">{MIN_MESSAGE}–{MAX_MESSAGE} chars · {MAX_MESSAGES} max</p>
+    <AutoDeleteNotice text="Auto-deletes in 24h."/>
 
- <section className="spts-card spts-section">
-  <div className="spts-card-head"><h2>Posts</h2><span className="spts-badge">{posts.length}</span></div>
-  {posts.length===0&&<p className="spts-muted spts-empty-text">No posts yet.</p>}
-  <div className="spts-post-grid">
-   {visiblePosts.map(x=><PostCard key={x.id} post={x} user={user} canDeletePost={canDeletePosts} onDeletePost={()=>deletePost(x.id)}/>)}
-  </div>
-  {!showAllPosts&&hiddenPostCount>0&&<button type="button" className="spts-see-more" onClick={()=>setShowAllPosts(true)}>See {hiddenPostCount} more post{hiddenPostCount===1?"":"s"}</button>}
-  {showAllPosts&&posts.length>POST_PREVIEW_COUNT&&<button type="button" className="spts-see-more spts-ghost" onClick={()=>setShowAllPosts(false)}>Show less</button>}
- </section>
+    <div className="spts-messagebox-thread">
+     <ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()} viewerRole="visitor" previewCount={3}/>
+    </div>
 
- <section className="spts-card spts-section spts-messagebox">
-  <div className="spts-card-head"><h2>Message {p.displayName}</h2></div>
-  <p className="spts-muted">{MIN_MESSAGE}-{MAX_MESSAGE} characters · {MAX_MESSAGES} messages/replies per conversation. You can reply to any reply you get back — right here.</p>
-  <AutoDeleteNotice text="Messages (and any replies) auto-delete 24h after they're sent."/>
-
-  <div className="spts-messagebox-thread">
-   <ConversationThread conversationId={`${p.uid}_${getDeviceId()}`} visitorId={getDeviceId()} viewerRole="visitor" previewCount={3}/>
-  </div>
-
-  <div className="spts-messagebox-compose">
-   <textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Type an anonymous message…" disabled={sending}/>
-   <SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>
-  </div>
-  {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{err}</span></div>}
+    <div className="spts-messagebox-compose">
+     <textarea minLength={MIN_MESSAGE} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Anonymous message…" disabled={sending}/>
+     <SpinnerButton busy={sending} busyLabel="Sending…" onClick={send} disabled={!msg.trim()}>Send</SpinnerButton>
+    </div>
+    {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{err}</span></div>}
+   </section>
+  </div>}
  </section>
 
  </main>
