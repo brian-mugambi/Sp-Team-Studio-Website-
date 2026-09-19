@@ -392,3 +392,6 @@ video.spts-media-el{cursor:pointer;}
 .spts-hero-panel{width:100%;text-align:left;margin-top:8px;}
 .spts-hero-panel:first-of-type{margin-top:18px;}
 .spts-hero-panel .spts-card{margin:8px 0 0;}
+
+/* Dashboard: read-only profile fields after initial setup */
+.spts-card input.spts-readonly{opacity:0.6;cursor:not-allowed;}

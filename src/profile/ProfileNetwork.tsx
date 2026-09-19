@@ -21,6 +21,17 @@ import "./profile.css";
 const profileStorage=getStorage(profileAuth.app);
 const PAYSTACK_UPGRADE_URL="https://paystack.shop/pay/bv5n43khmv";
 
+/* Support on WhatsApp — the number is never shown; users only see "Contact support".
+ * wa.me needs the number in international format, so set SUPPORT_COUNTRY_CODE
+ * (digits only, e.g. "234" or "60") — it replaces the leading 0 of the local number. */
+const SUPPORT_WHATSAPP="0182322555";
+const SUPPORT_COUNTRY_CODE="254";
+function supportUrl(text:string){
+ const local=SUPPORT_WHATSAPP.replace(/\D/g,"");
+ const intl=SUPPORT_COUNTRY_CODE?SUPPORT_COUNTRY_CODE+local.replace(/^0+/,""):local;
+ return `https://wa.me/${intl}?text=${encodeURIComponent(text)}`;
+}
+
 /* ------------------------------------------------------------------ *
  * Shared UI primitives: Toasts, ConfirmDialog, SpinnerButton
  * These replace window.confirm / window.alert everywhere and give
@@ -628,6 +639,7 @@ function Dashboard({user}:{user:User}){
  const [addingPost,setAddingPost]=useState(false);
  const confirm=useConfirm();const toast=useToast();
  const isPremium=!!profile?.premium;
+ const locked=!!profile; // after initial setup only the bio is editable
 
  useEffect(()=>{(async()=>{
   try{
@@ -645,6 +657,15 @@ function Dashboard({user}:{user:User}){
 
  async function save(e:React.FormEvent){
   e.preventDefault();
+  if(profile){ // profile already set up: update the bio only
+   setErr("");setSavingProfile(true);
+   try{
+    await setDoc(doc(profileDb,"profiles",profile.username),{bio:bio.trim(),updatedAt:serverTimestamp()},{merge:true});
+    setProfile((prev:any)=>({...prev,bio:bio.trim()}));setEditing(false);toast("success","Bio saved.");
+   }catch(x:any){setErr(x.message||"Unable to save bio");toast("error",x.message||"Unable to save bio");}
+   finally{setSavingProfile(false);}
+   return;
+  }
   const x=normalizeUsername(u);
   if(!validUsername(x)){setErr("Username must be 3-24 letters, numbers or underscore.");return;}
   if(!name.trim()){setErr("Display name is required.");return;}
@@ -750,13 +771,15 @@ function Dashboard({user}:{user:User}){
   </div>}
 
   {!loadingProfile&&editing&&<form onSubmit={save}>
-   <label>Username<input required placeholder="yourname" value={u} onChange={e=>setU(e.target.value)} disabled={savingProfile}/></label>
-   <label>Display name<input required placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} disabled={savingProfile}/></label>
+   {locked&&<p className="spts-muted">Only your bio can be edited. To change anything else,{" "}
+    <a className="spts-link" href={supportUrl(`Hi, I'd like to change my profile details. Username: @${profile.username}`)} target="_blank" rel="noreferrer">contact support</a>.</p>}
+   <label>Username<input required={!locked} readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="yourname" value={u} onChange={e=>setU(e.target.value)} disabled={savingProfile}/></label>
+   <label>Display name<input required={!locked} readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} disabled={savingProfile}/></label>
    <label>Bio<textarea maxLength={1000} placeholder="Tell visitors about yourself" value={bio} onChange={e=>setBio(e.target.value)} disabled={savingProfile}/></label>
-   <label>Profile photo URL<input placeholder="https://…" value={photo} onChange={e=>setPhoto(e.target.value)} disabled={savingProfile}/></label>
-   <label>Website URL<input placeholder="https://…" value={web} onChange={e=>setWeb(e.target.value)} disabled={savingProfile}/></label>
-   <label>Public email<input type="email" placeholder="Shown on your public profile" value={email} onChange={e=>setEmail(e.target.value)} disabled={savingProfile}/></label>
-   <label>Public phone<input placeholder="Shown on your public profile" value={phone} onChange={e=>setPhone(e.target.value)} disabled={savingProfile}/></label>
+   <label>Profile photo URL<input readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="https://…" value={photo} onChange={e=>setPhoto(e.target.value)} disabled={savingProfile}/></label>
+   <label>Website URL<input readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="https://…" value={web} onChange={e=>setWeb(e.target.value)} disabled={savingProfile}/></label>
+   <label>Public email<input type="email" readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="Shown on your public profile" value={email} onChange={e=>setEmail(e.target.value)} disabled={savingProfile}/></label>
+   <label>Public phone<input readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="Shown on your public profile" value={phone} onChange={e=>setPhone(e.target.value)} disabled={savingProfile}/></label>
    <div className="spts-form-actions">
     <SpinnerButton type="submit" busy={savingProfile} busyLabel="Saving…">{profile?"Save changes":"Create profile"}</SpinnerButton>
     {profile&&<button type="button" className="spts-ghost" onClick={cancelEdit} disabled={savingProfile}>Cancel</button>}
