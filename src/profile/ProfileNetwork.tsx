@@ -1315,7 +1315,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   <div className="spts-profile-hero-actions">
    {!msgOpen&&<button type="button" aria-expanded={postsOpen} onClick={()=>setPostsOpen(o=>!o)} {...hint.props("seePosts")}>{postsOpen?"Hide posts":"See posts"}</button>}
    {!postsOpen&&<button type="button" aria-expanded={msgOpen} onClick={()=>setMsgOpen(o=>!o)} {...hint.props("message")}>{msgOpen?"Hide message":"Message"}</button>}
-   {!postsOpen&&!msgOpen&&<a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`} {...(p.premium?{target:"_blank",rel:"noopener noreferrer"}:{})} {...hint.props("portfolio")}>See portfolio</a>}
+   {!postsOpen&&!msgOpen&&<a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`} {...hint.props("portfolio")}>See portfolio</a>}
   </div>
   {!postsOpen&&!msgOpen&&<div className="spts-profile-hero-actions spts-hero-actions-2">
    <button type="button" className="spts-ghost" onClick={shareProfile} {...hint.props("share")}>{copied?<><Ico d={ICON.check}/> Link copied</>:"Share profile"}</button>
@@ -1534,10 +1534,6 @@ const AD_DURATIONS=[
 const AD_CACHE_KEY="spts_ad_v1:",AD_LASTREQ_KEY="spts_adreq_v1:",AD_PREMIUM_KEY="spts_adpremium_v1:";
 // Premium owners upload their own portfolio: one .html file, strictly under 0.5 MB.
 const PORTFOLIO_MAX_BYTES=Math.floor(0.5*1024*1024);
-// Premium portfolios open as their own full page in a new tab. Scripts, forms, pop-ups, downloads and
-// modals work. allow-same-origin is deliberately NOT here: it would let uploaded code read the Firebase
-// session of every signed-in visitor (see the hand-off note).
-const PREMIUM_SANDBOX="allow-scripts allow-forms allow-modals allow-downloads allow-popups allow-popups-to-escape-sandbox";
 
 function todayLocal(){ return new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10); }
 function addDaysISO(iso:string,n:number){const d=new Date(`${iso}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
@@ -1571,7 +1567,7 @@ async function fetchAd(u:string):Promise<AdDoc|null>{
  const s=await getDoc(doc(profileDb,"profiles",u,"ad","code"));
  return s.exists()?parseAd(s.data()):null;
 }
-// Whether the profile is Premium decides how its portfolio opens (own tab vs. inside the app).
+// Whether the profile is Premium decides if the portfolio viewer offers the optional "Open in new tab" button.
 function readPremiumCache(u:string):boolean|null{
  try{const r=localStorage.getItem(AD_PREMIUM_KEY+u);return r===null?null:r==="1";}catch{return null;}
 }
@@ -1830,10 +1826,9 @@ function PortfolioUpload({profile}:{profile:any}){
    <div className="spts-ad-actions">
     <SpinnerButton type="submit" busy={busy} busyLabel="Publishing…" disabled={!file||!!fileErr||removing}>{ad?"Replace portfolio":"Upload portfolio"}</SpinnerButton>
     {ad&&<SpinnerButton className="spts-danger" busy={removing} busyLabel="Removing…" disabled={busy} onClick={remove}>Remove</SpinnerButton>}
-    {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`} target="_blank" rel="noopener noreferrer">View portfolio</a>}
+    {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>View portfolio</a>}
    </div>
   </form>
-  <p className="spts-muted">Opens in its own tab. Scripts and forms work; cookies and local storage aren't available to the page.</p>
  </section>;
 }
 
@@ -1865,7 +1860,7 @@ function AdRequestCard({user,profile}:{user:User;profile:any}){
    <button type="button" disabled={blocked} onClick={()=>setOpen(true)}>Request portfolio</button>
    {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>See portfolio</a>}
   </div>
-  <p className="spts-muted">Premium members upload their own portfolio and it opens in its own tab.</p>
+  <p className="spts-muted">Premium members upload their own portfolio.</p>
   {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setBump(b=>b+1);}}/>}
  </section>;
 }
@@ -1895,9 +1890,8 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
 }
 
 // Public portfolio page (route + Firestore names still say "ad"). Runs the html string in a sandboxed iframe
-// (no allow-same-origin), so the code can't reach this app's auth session, storage or DOM.
-//  - Basic profiles: inside the app, under a small bar, with the tight sandbox.
-//  - Premium profiles: their own full page (this page is opened in a new tab), with a wider sandbox.
+// (no allow-same-origin), so the code can't reach this app's auth session, storage or DOM. Same for every profile.
+// Premium portfolios also get an optional "Open in new tab" button (see openLocally).
 // A cached copy renders on the very first paint (no loading screen); Firestore then refreshes it silently.
 function AdView({username,user,authLoading}:{username:string;user:User|null;authLoading:boolean}){
  const uname=normalizeUsername(username);
@@ -1905,7 +1899,7 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  const [premium,setPremium]=useState<boolean|null>(()=>typeof window!=="undefined"?readPremiumCache(uname):null);
  const [settled,setSettled]=useState(false),[failed,setFailed]=useState(false),[failedText,setFailedText]=useState(ACCESS_GENERIC),[tries,setTries]=useState(0);
  const [copied,setCopied]=useState(false);
- const toast=useToast();
+ const toast=useToast();const confirm=useConfirm();
  async function copyLink(){
   try{
    await navigator.clipboard.writeText(`${location.origin}/profile/${uname}/ad`);
@@ -1931,33 +1925,40 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  },[uname,tries]);
 
  const live=!!ad&&adPhase(ad,todayLocal())==="live";
- const standalone=live&&premium===true;
- useEffect(()=>{ if(standalone)document.title=`@${uname} · Portfolio`; },[standalone,uname]);
 
- if(standalone)return <main className="spts-ad spts-ad-standalone">
-  <iframe
-   className="spts-ad-frame"
-   title={`Portfolio by @${uname}`}
-   srcDoc={ad!.html}
-   sandbox={PREMIUM_SANDBOX}
-   referrerPolicy="no-referrer"
-  />
- </main>;
+ // Optional, Premium portfolios only, and only when the visitor taps it. The saved html is turned into a
+ // local blob: page on this device and opened in a new tab, outside the sandbox. That page shares this
+ // site's origin, so the visitor is asked to confirm first.
+ async function openLocally(){
+  if(!ad)return;
+  const ok=await confirm({
+   title:"Open outside the sandbox?",
+   body:<p className="spts-muted">This opens the portfolio in a new tab on your device without the sandbox, so its code runs with the same access as this site. Only continue if you trust @{uname}.</p>,
+   confirmLabel:"Open in new tab",
+  });
+  if(!ok)return;
+  try{
+   const url=URL.createObjectURL(new Blob([ad.html],{type:"text/html;charset=utf-8"}));
+   window.open(url,"_blank","noopener");
+   setTimeout(()=>URL.revokeObjectURL(url),10*60*1000);
+  }catch{ toast("error","Couldn't open the portfolio in a new tab."); }
+ }
 
- const known=premium!==null||settled; // don't flash the app bar before we know which layout applies
  return <main className="spts-ad">
-  {known&&<header className="spts-ad-bar">
+  <header className="spts-ad-bar">
    <a className="spts-ghost spts-link-btn" href={`/profile/${uname}`}><Ico d={ICON.back}/> @{uname}</a>
-   <button type="button" className="spts-ghost" onClick={copyLink}>{copied?<><Ico d={ICON.check}/> Copied</>:"Copy link"}</button>
-  </header>}
-  {live&&premium===false&&<iframe
+   <div className="spts-ad-bar-actions">
+    <button type="button" className="spts-ghost" onClick={copyLink}>{copied?<><Ico d={ICON.check}/> Copied</>:"Copy link"}</button>
+    {live&&premium===true&&<button type="button" className="spts-ghost" onClick={openLocally}>Open in new tab</button>}
+   </div>
+  </header>
+  {live&&<iframe
    className="spts-ad-frame"
    title={`Portfolio by @${uname}`}
    srcDoc={ad!.html}
    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
    referrerPolicy="no-referrer"
   />}
-  {live&&premium===null&&<div className="spts-ad-frame spts-ad-blank"/>}
   {!live&&!settled&&<div className="spts-ad-frame spts-ad-blank"/>}
   {!live&&settled&&!failed&&<div className="spts-public-status">
    <h1>Portfolio not found</h1>
@@ -1987,7 +1988,7 @@ export default function ProfileNetwork({username,view}:{username?:string;view?:"
  const adMatch=/^\/profile\/([^/]+)\/(?:ad|portfolio)\/?$/.exec(typeof location!=="undefined"?location.pathname:"");
  const adUser=(view==="ad"||view==="portfolio")?username:adMatch?decodeURIComponent(adMatch[1]):undefined;
  // The ad page never waits for auth: the ad paints straight away, auth only matters for the "Request portfolio" button.
- if(adUser)return <ToastHost><AdView key={adUser} username={adUser} user={user} authLoading={loading}/></ToastHost>;
+ if(adUser)return <ToastHost><ConfirmHost><AdView key={adUser} username={adUser} user={user} authLoading={loading}/></ConfirmHost></ToastHost>;
  if(loading)return <main className="spts-page">Loading…</main>;
  return <ToastHost><ConfirmHost><ActiveVideoHost>
   {username==="upgradesuccessConfirm"?<UpgradeSuccess user={user}/>
