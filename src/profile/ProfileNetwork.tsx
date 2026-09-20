@@ -556,7 +556,7 @@ async function cascadeConversation(conversationId:string){
  * ------------------------------------------------------------------ */
 const TTL_STORAGE_KEY="spts_ttl_queue";
 const TTL_MS=24*60*60*1000;
-type TTLEntry=
+type TTLBase=
  |{kind:"post";postId:string;deleteAt:number}
  |{kind:"comment";postId:string;commentId:string;deleteAt:number}
  |{kind:"like";postId:string;uid:string;deleteAt:number}
@@ -564,6 +564,7 @@ type TTLEntry=
  |{kind:"conversation";conversationId:string;deleteAt:number}
  |{kind:"message";conversationId:string;messageId:string;deleteAt:number}
  |{kind:"reply";conversationId:string;messageId:string;replyId:string;deleteAt:number};
+type TTLEntry=TTLBase&{tries?:number};
 
 function readTTLQueue():TTLEntry[]{
  try{ return JSON.parse(localStorage.getItem(TTL_STORAGE_KEY)||"[]"); }catch{ return []; }
@@ -575,24 +576,43 @@ function scheduleAutoDelete(entry:TTLEntry|Omit<TTLEntry,"deleteAt">){
  const withTime="deleteAt" in entry?entry as TTLEntry:{...entry,deleteAt:Date.now()+TTL_MS} as TTLEntry;
  writeTTLQueue([...readTTLQueue(),withTime]);
 }
+// Posts, comments and likes can only be deleted by their signed-in owner; conversations, messages and replies
+// need no sign-in. An item leaves the queue only once its delete has worked. It waits while the person is signed
+// out, is retried on later sweeps if the delete fails, and is dropped after TTL_MAX_TRIES failures or a week overdue.
+const TTL_NEEDS_AUTH=new Set(["post","comment","like","commentlike"]);
+const TTL_MAX_TRIES=5,TTL_GIVE_UP_MS=7*24*60*60*1000;
+const ttlId=(e:TTLEntry)=>{ const {tries,...rest}=e as any; return JSON.stringify(rest); };
+let ttlSweeping=false;
 async function runTTLSweep(){
- const q=readTTLQueue();
- if(q.length===0)return;
+ if(ttlSweeping)return;
  const now=Date.now();
- const due=q.filter(e=>e.deleteAt<=now);
+ const due=readTTLQueue().filter(e=>e.deleteAt<=now);
  if(due.length===0)return;
- writeTTLQueue(q.filter(e=>e.deleteAt>now));
- for(const e of due){
-  try{
-   if(e.kind==="post")await cascadePost(e.postId);
-   else if(e.kind==="comment")await cascadeComment(e.postId,e.commentId);
-   else if(e.kind==="commentlike")await deleteDoc(doc(profileDb,"posts",e.postId,"comments",e.commentId,"likes",e.uid));
-   else if(e.kind==="like")await deleteDoc(doc(profileDb,"posts",e.postId,"likes",e.uid));
-   else if(e.kind==="conversation")await deleteDoc(doc(profileDb,"conversations",e.conversationId));
-   else if(e.kind==="message")await cascadeMessage(e.conversationId,e.messageId);
-   else if(e.kind==="reply")await deleteDoc(doc(profileDb,"conversations",e.conversationId,"messages",e.messageId,"replies",e.replyId));
-  }catch{ /* best-effort: same as if the user had tried to delete and it failed */ }
- }
+ ttlSweeping=true;
+ try{
+  const signedIn=!!profileAuth.currentUser;
+  const done=new Set<string>(),failed=new Set<string>();
+  for(const e of due){
+   const id=ttlId(e);
+   if(now-e.deleteAt>TTL_GIVE_UP_MS){done.add(id);continue;}          // too old to keep trying
+   if(!signedIn&&TTL_NEEDS_AUTH.has(e.kind))continue;                 // wait for sign-in
+   try{
+    if(e.kind==="post")await cascadePost(e.postId);
+    else if(e.kind==="comment")await cascadeComment(e.postId,e.commentId);
+    else if(e.kind==="commentlike")await deleteDoc(doc(profileDb,"posts",e.postId,"comments",e.commentId,"likes",e.uid));
+    else if(e.kind==="like")await deleteDoc(doc(profileDb,"posts",e.postId,"likes",e.uid));
+    else if(e.kind==="conversation")await deleteDoc(doc(profileDb,"conversations",e.conversationId));
+    else if(e.kind==="message")await cascadeMessage(e.conversationId,e.messageId);
+    else if(e.kind==="reply")await deleteDoc(doc(profileDb,"conversations",e.conversationId,"messages",e.messageId,"replies",e.replyId));
+    done.add(id);
+   }catch{ failed.add(id); }                                           // keep it and try again next sweep
+  }
+  // Re-read the queue so anything added while sweeping is kept.
+  writeTTLQueue(readTTLQueue()
+   .filter(e=>!done.has(ttlId(e)))
+   .map(e=>failed.has(ttlId(e))?{...e,tries:(e.tries||0)+1}:e)
+   .filter(e=>(e.tries||0)<TTL_MAX_TRIES));
+ }finally{ ttlSweeping=false; }
 }
 
 /* ------------------------------------------------------------------ *
@@ -2047,9 +2067,8 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  * ------------------------------------------------------------------ */
 export default function ProfileNetwork({username,view}:{username?:string;view?:"ad"|"portfolio"}){
  const [user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(true);
- useEffect(()=>onAuthStateChanged(profileAuth,u=>{setUser(u);setLoading(false)}),[]);
+ useEffect(()=>onAuthStateChanged(profileAuth,u=>{setUser(u);setLoading(false);runTTLSweep();}),[]); // sweep once auth is known
  useEffect(()=>{
-  runTTLSweep();
   const id=setInterval(runTTLSweep,5*60*1000);
   return ()=>clearInterval(id);
  },[]);
