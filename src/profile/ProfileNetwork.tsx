@@ -1245,6 +1245,14 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  const [postsOpen,setPostsOpen]=useState(false),[msgOpen,setMsgOpen]=useState(false);
  const confirm=useConfirm();const toast=useToast();const hint=useHint();
 
+ // On small screens Posts / Message open full screen; lock the page behind them while they're open.
+ useEffect(()=>{
+  if(!(postsOpen||msgOpen))return;
+  const el=document.documentElement;
+  el.classList.add("spts-panel-open");
+  return ()=>el.classList.remove("spts-panel-open");
+ },[postsOpen,msgOpen]);
+
  useEffect(()=>{(async()=>{try{
   const s=await getDoc(doc(profileDb,"profiles",normalizeUsername(username)));
   if(!s.exists()){setNotFound(true);return;}
@@ -1298,7 +1306,10 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   setCopied(true);
   setTimeout(()=>setCopied(false),2000);
  }
+ // Layout: the profile is one column; Posts / Message open as a second panel.
+ // Desktop: profile on the left, panel on the right. Mobile: the profile fills the screen and the panel opens full screen.
  return <main className={`spts-public${p.premium?" spts-premium":""}`}>
+ <div className={`spts-profile-layout${postsOpen||msgOpen?" spts-has-panel":""}`}>
 
  <section className="spts-profile-hero">
   {p.photoUrl?<img className="spts-avatar-lg" src={p.photoUrl} alt={p.displayName}/>:<div className="spts-avatar-lg spts-avatar-fallback" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
@@ -1322,38 +1333,48 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    <a className="spts-ghost spts-link-btn" href="/profiles" {...hint.props("getOwn")}>Get your own profile</a>
   </div>}
   <small className="spts-muted spts-contact-note"><Hint k="contactNote">{contacts.urls.length+contacts.emails.length+contacts.phones.length} contact/link items detected in bio</Hint></small>
-  {postsOpen&&<div className="spts-hero-panel">
-   <section className="spts-card spts-section">
-    <div className="spts-card-head"><h2>Posts</h2><span className="spts-badge">{posts.length}</span></div>
-    {posts.length===0&&<p className="spts-muted spts-empty-text">No posts yet.</p>}
-    <div className="spts-post-grid">
-     {visiblePosts.map(x=><PostCard key={x.id} post={x} user={user} canDeletePost={canDeletePosts} onDeletePost={()=>deletePost(x.id)}/>)}
-    </div>
-    {!showAllPosts&&hiddenPostCount>0&&<button type="button" className="spts-see-more" onClick={()=>setShowAllPosts(true)}>See {hiddenPostCount} more</button>}
-    {showAllPosts&&posts.length>POST_PREVIEW_COUNT&&<button type="button" className="spts-see-more spts-ghost" onClick={()=>setShowAllPosts(false)}>Show less</button>}
-   </section>
-  </div>}
-  {msgOpen&&<div className="spts-hero-panel">
-   <section className="spts-card spts-section spts-chat">
-    <div className="spts-chat-head">
-     {p.photoUrl?<img className="spts-chat-avatar" src={p.photoUrl} alt=""/>:<div className="spts-chat-avatar" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
-     <div><strong>{p.displayName}</strong><small><Hint k="anonymous">Anonymous</Hint> · <Hint k="autodelete">auto-deletes in 24h</Hint></small></div>
-    </div>
-
-    <VisitorChat conversationId={`${p.uid}_${getDeviceId()}`}/>
-
-    <div className="spts-chat-compose">
-     <AutoTextarea maxLength={MSG_MAX} value={msg} onChange={e=>setMsg(e.target.value)}
-      onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();if(msg.trim()&&!sending)send();}}}
-      placeholder="Message…" disabled={sending}/>
-     <SpinnerButton className="spts-chat-send" busy={sending} busyLabel="" onClick={send} disabled={!msg.trim()} title="Send"><Ico d={ICON.send}/></SpinnerButton>
-    </div>
-    <div className="spts-chat-foot"><Hint k="msgLimit">{MSG_MIN}–{MSG_MAX} characters</Hint><span>{msg.length}/{MSG_MAX}</span></div>
-    {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span><ErrText text={err}/></span></div>}
-   </section>
-  </div>}
  </section>
 
+ {postsOpen&&<aside className="spts-profile-panel" aria-label="Posts">
+  <div className="spts-panel-bar">
+   <div className="spts-panel-title"><h2>Posts</h2><span className="spts-badge">{posts.length}</span></div>
+   <button type="button" className="spts-ghost spts-panel-close" onClick={()=>setPostsOpen(false)} aria-label="Hide posts"><Ico d={ICON.close}/></button>
+  </div>
+  <section className="spts-card spts-section">
+   {posts.length===0&&<p className="spts-muted spts-empty-text">No posts yet.</p>}
+   <div className="spts-post-grid">
+    {visiblePosts.map(x=><PostCard key={x.id} post={x} user={user} canDeletePost={canDeletePosts} onDeletePost={()=>deletePost(x.id)}/>)}
+   </div>
+   {!showAllPosts&&hiddenPostCount>0&&<button type="button" className="spts-see-more" onClick={()=>setShowAllPosts(true)}>See {hiddenPostCount} more</button>}
+   {showAllPosts&&posts.length>POST_PREVIEW_COUNT&&<button type="button" className="spts-see-more spts-ghost" onClick={()=>setShowAllPosts(false)}>Show less</button>}
+  </section>
+ </aside>}
+
+ {msgOpen&&<aside className="spts-profile-panel spts-profile-panel-chat" aria-label="Message">
+  <div className="spts-panel-bar">
+   <div className="spts-panel-title"><h2>Message</h2></div>
+   <button type="button" className="spts-ghost spts-panel-close" onClick={()=>setMsgOpen(false)} aria-label="Hide message"><Ico d={ICON.close}/></button>
+  </div>
+  <section className="spts-card spts-section spts-chat">
+   <div className="spts-chat-head">
+    {p.photoUrl?<img className="spts-chat-avatar" src={p.photoUrl} alt=""/>:<div className="spts-chat-avatar" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
+    <div><strong>{p.displayName}</strong><small><Hint k="anonymous">Anonymous</Hint> · <Hint k="autodelete">auto-deletes in 24h</Hint></small></div>
+   </div>
+
+   <VisitorChat conversationId={`${p.uid}_${getDeviceId()}`}/>
+
+   <div className="spts-chat-compose">
+    <AutoTextarea maxLength={MSG_MAX} value={msg} onChange={e=>setMsg(e.target.value)}
+     onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();if(msg.trim()&&!sending)send();}}}
+     placeholder="Message…" disabled={sending}/>
+    <SpinnerButton className="spts-chat-send" busy={sending} busyLabel="" onClick={send} disabled={!msg.trim()} title="Send"><Ico d={ICON.send}/></SpinnerButton>
+   </div>
+   <div className="spts-chat-foot"><Hint k="msgLimit">{MSG_MIN}–{MSG_MAX} characters</Hint><span>{msg.length}/{MSG_MAX}</span></div>
+   {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span><ErrText text={err}/></span></div>}
+  </section>
+ </aside>}
+
+ </div>
  </main>
 }
 

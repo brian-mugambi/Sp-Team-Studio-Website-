@@ -1980,3 +1980,91 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
 
 /* Portfolio viewer bar: buttons on the right (Copy link, and for Premium, Open in new tab). */
 .spts-ad-bar-actions{display:flex;align-items:center;gap:8px;}
+
+
+/* ================================================================
+   PUBLIC PROFILE LAYOUT
+   Desktop: the profile sits on the left; Posts / Message open on the right.
+   Mobile and tablet: the profile fills the screen and Posts / Message open
+   full screen. Structure only; the profile's own look is unchanged.
+   ================================================================ */
+
+/* Shared: the panel header (title + close) and the panel itself. */
+.spts-public .spts-profile-panel{min-width:0;animation:spts-panel-in .22s ease-out;}
+.spts-public .spts-panel-bar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin:0 0 16px;padding:0 0 14px;border-bottom:1px solid var(--line);
+}
+.spts-public .spts-panel-title{display:flex;align-items:center;gap:10px;min-width:0;}
+.spts-public .spts-panel-title h2{margin:0;color:var(--cyan);font-size:clamp(1.25rem,3vw,1.65rem);}
+.spts-public .spts-panel-title h2::before{content:'> ';color:var(--violet);}
+.spts-public button.spts-panel-close{
+  flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:40px;height:40px;min-height:40px;padding:0;
+}
+.spts-public .spts-profile-panel > .spts-card{margin:0;}
+.spts-public .spts-profile-panel-chat > .spts-chat{max-width:none;margin:0;}
+.spts-public .spts-profile-panel-chat .spts-chat-thread{
+  min-height:320px;max-height:min(56vh,560px);max-height:min(56dvh,560px);
+}
+@keyframes spts-panel-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+@keyframes spts-panel-up{from{transform:translateY(100%);}to{transform:none;}}
+@media (prefers-reduced-motion:reduce){.spts-public .spts-profile-panel{animation:none;}}
+
+/* Desktop: one column until a panel opens, then profile left / panel right. */
+.spts-public .spts-profile-layout{
+  display:grid;grid-template-columns:minmax(0,1fr);column-gap:56px;align-items:stretch;
+  min-height:max(440px,calc(100vh - 190px));min-height:max(440px,calc(100dvh - 190px));
+}
+.spts-public .spts-profile-layout .spts-profile-hero{min-height:0;margin-bottom:0;}
+
+@media (min-width:901px){
+  .spts-public .spts-profile-layout.spts-has-panel{
+    grid-template-columns:minmax(300px,380px) minmax(0,1fr);align-items:start;
+  }
+  .spts-public .spts-has-panel .spts-profile-hero{
+    position:sticky;top:24px;padding:30px 0 40px;border-bottom:0;
+  }
+  .spts-public .spts-has-panel .spts-profile-name{font-size:clamp(1.8rem,3vw,2.6rem);}
+}
+
+/* Mobile / tablet: the profile fills the screen; the panel is a full-screen layer. */
+@media (max-width:900px){
+  html.spts-panel-open,
+  html.spts-panel-open body{overflow:hidden;}
+
+  .spts-public{width:100%;max-width:none;margin:0;padding:0;}
+  .spts-public .spts-public-status{padding:40px 20px;}
+
+  .spts-public .spts-profile-layout{display:block;min-height:0;}
+  .spts-public .spts-profile-layout .spts-profile-hero{
+    min-height:100vh;min-height:100dvh;margin:0;
+    padding:calc(28px + env(safe-area-inset-top,0px)) 20px calc(28px + env(safe-area-inset-bottom,0px));
+    border-bottom:0;justify-content:center;
+  }
+  .spts-public .spts-profile-hero::before{top:calc(12px + env(safe-area-inset-top,0px));left:20px;}
+  .spts-public .spts-profile-hero::after{left:20px;bottom:0;}
+
+  .spts-public .spts-profile-panel{
+    position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;
+    background:var(--bg);animation:spts-panel-up .24s ease-out;
+  }
+  .spts-public .spts-panel-bar{
+    flex:none;margin:0;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px;
+  }
+  .spts-public .spts-profile-panel > .spts-card{
+    flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+    border:0;border-radius:0;background:transparent;
+    padding:16px 16px calc(24px + env(safe-area-inset-bottom,0px));
+  }
+  .spts-public .spts-profile-panel-chat > .spts-chat{
+    display:flex;flex-direction:column;overflow:hidden;
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+  }
+  .spts-public .spts-profile-panel-chat .spts-chat-thread{flex:1 1 auto;min-height:0;max-height:none;}
+  .spts-public .spts-profile-panel-chat .spts-chat-head,
+  .spts-public .spts-profile-panel-chat .spts-chat-compose,
+  .spts-public .spts-profile-panel-chat .spts-chat-foot,
+  .spts-public .spts-profile-panel-chat .spts-error-box{flex:none;}
+}
+
