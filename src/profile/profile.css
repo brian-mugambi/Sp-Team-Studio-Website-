@@ -2073,3 +2073,14 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
 .spts-page .spts-card select{padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;}
 .spts-page .spts-card select:focus{outline:none;border-color:var(--cyan);}
 .spts-page .spts-card select:disabled{opacity:.6;cursor:not-allowed;}
+
+
+/* Public profile picture: tap to view full screen (reuses the lightbox). */
+.spts-public button.spts-avatar-btn,
+.spts-public button.spts-avatar-btn:hover,
+.spts-public button.spts-avatar-btn:active{
+  display:block;min-height:0;margin:0 0 22px;padding:0;border:0;border-radius:50%;
+  background:transparent;box-shadow:none;line-height:0;cursor:zoom-in;transform:none;
+}
+.spts-public button.spts-avatar-btn .spts-avatar-lg{display:block;margin:0;}
+.spts-public button.spts-avatar-btn:focus-visible{outline:1px solid var(--cyan);outline-offset:4px;}

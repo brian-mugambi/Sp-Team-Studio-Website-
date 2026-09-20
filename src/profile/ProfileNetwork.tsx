@@ -404,12 +404,20 @@ function PostMedia({post}:{post:any}){
  * MediaLightbox — distortion-free full-screen viewing (object-fit:
  * contain regardless of orientation), closable via backdrop, close button or Esc.
  * ------------------------------------------------------------------ */
-function MediaLightbox({post,isVideo,onClose}:{post:any;isVideo:boolean;onClose:()=>void}){
+function MediaLightbox({post,isVideo,onClose,autoCloseMs}:{post:any;isVideo:boolean;onClose:()=>void;autoCloseMs?:number}){
  useEffect(()=>{
   function onKey(e:KeyboardEvent){ if(e.key==="Escape")onClose(); }
   document.addEventListener("keydown",onKey);
   return ()=>document.removeEventListener("keydown",onKey);
  },[onClose]);
+ // Optional silent auto-close (nothing is shown to the user). The latest onClose is read from a ref so
+ // a parent re-render never restarts the timer.
+ const closeRef=useRef(onClose);closeRef.current=onClose;
+ useEffect(()=>{
+  if(!autoCloseMs)return;
+  const t=window.setTimeout(()=>closeRef.current(),autoCloseMs);
+  return ()=>window.clearTimeout(t);
+ },[autoCloseMs]);
  return <div className="spts-lightbox-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
   <button type="button" className="spts-lightbox-close" onClick={onClose} aria-label="Close full screen view"><Ico d={ICON.close}/></button>
   <div className="spts-lightbox-stage" onClick={e=>e.stopPropagation()}>
@@ -1256,7 +1264,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
  const [showAllPosts,setShowAllPosts]=useState(false);
  const [copied,setCopied]=useState(false);
- const [postsOpen,setPostsOpen]=useState(false),[msgOpen,setMsgOpen]=useState(false);
+ const [postsOpen,setPostsOpen]=useState(false),[msgOpen,setMsgOpen]=useState(false),[avatarOpen,setAvatarOpen]=useState(false);
  const confirm=useConfirm();const toast=useToast();const hint=useHint();
 
  // On small screens Posts / Message open full screen; lock the page behind them while they're open.
@@ -1326,7 +1334,9 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  <div className={`spts-profile-layout${postsOpen||msgOpen?" spts-has-panel":""}`}>
 
  <section className="spts-profile-hero">
-  {p.photoUrl?<img className="spts-avatar-lg" src={p.photoUrl} alt={p.displayName}/>:<div className="spts-avatar-lg spts-avatar-fallback" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
+  {p.photoUrl
+   ?<button type="button" className="spts-avatar-btn" onClick={()=>setAvatarOpen(true)} aria-label="View profile picture full screen"><img className="spts-avatar-lg" src={p.photoUrl} alt={p.displayName}/></button>
+   :<div className="spts-avatar-lg spts-avatar-fallback" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
   <h1 className="spts-profile-name">{p.displayName}</h1>
   <p className="spts-profile-handle">@{p.username}</p>
   {p.premium&&<Hint k="premium" plain className="spts-premium-badge">Premium</Hint>}
@@ -1389,6 +1399,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  </aside>}
 
  </div>
+ {avatarOpen&&p.photoUrl&&<MediaLightbox post={{mediaUrl:p.photoUrl,caption:p.displayName}} isVideo={false} autoCloseMs={10000} onClose={()=>setAvatarOpen(false)}/>}
  </main>
 }
 
