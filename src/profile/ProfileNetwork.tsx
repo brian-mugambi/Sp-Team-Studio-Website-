@@ -197,19 +197,19 @@ const HINTS={
  commentLimit:`Comments can be ${COMMENT_MIN} to ${COMMENT_MAX} characters.`,
  seePosts:"Shows this profile's posts. The other buttons hide until you hide them.",
  message:"Send the owner an anonymous message. Only they can reply.",
- portfolio:"Opens this owner's Premium portfolio page.",
+ portfolio:"Opens this owner's portfolio page.",
  share:"Copies this profile's link.",
  getOwn:"Create your own public profile.",
  website:"Opens the owner's website in a new tab.",
  email:"Opens your email app to write to the owner.",
  phone:"Calls the owner if your device supports calling.",
  contactNote:"Links, emails and phone numbers in the bio are made tappable.",
- premium:"Premium: gold profile theme, direct file uploads and a portfolio page.",
+ premium:"Premium: gold profile theme, direct file uploads, and your own portfolio page that you upload yourself.",
  live:"Your public profile is live and visible to anyone with your link.",
  like:"Likes are removed 24 hours after they're added, from the device that added them.",
  postCount:`Posts used out of the ${MAX_POSTS} allowed.`,
  inboxCount:"Conversations with visitors. Each visitor is one conversation.",
- upgrade:"Opens Paystack to pay for Premium, which unlocks the gold theme, file uploads and a portfolio page.",
+ upgrade:"Opens Paystack to pay for Premium, which unlocks the gold theme, file uploads and uploading your own portfolio.",
  adLive:"Your portfolio page is visible to the public.",
  adScheduled:"Your portfolio is ready and goes live on its start date.",
  adWaiting:"Request received. We're preparing your portfolio.",
@@ -1249,7 +1249,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   const s=await getDoc(doc(profileDb,"profiles",normalizeUsername(username)));
   if(!s.exists()){setNotFound(true);return;}
   setP(s.data());
-  prefetchAd(s.data().username||normalizeUsername(username)); // so "See portfolio" opens instantly
+  prefetchAd(s.data().username||normalizeUsername(username),!!s.data().premium); // so "See portfolio" opens instantly
   const q=query(collection(profileDb,"posts"),where("ownerId","==",s.data().uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
   onSnapshot(q,x=>setPosts(x.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(accessText(e,ACCESS_GENERIC)));
  }catch(x:any){setErr(fail(toast,x,"Unable to load profile"));}})()},[username]);
@@ -1315,7 +1315,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   <div className="spts-profile-hero-actions">
    {!msgOpen&&<button type="button" aria-expanded={postsOpen} onClick={()=>setPostsOpen(o=>!o)} {...hint.props("seePosts")}>{postsOpen?"Hide posts":"See posts"}</button>}
    {!postsOpen&&<button type="button" aria-expanded={msgOpen} onClick={()=>setMsgOpen(o=>!o)} {...hint.props("message")}>{msgOpen?"Hide message":"Message"}</button>}
-   {!postsOpen&&!msgOpen&&<a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`} {...hint.props("portfolio")}>See portfolio</a>}
+   {!postsOpen&&!msgOpen&&<a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`} {...(p.premium?{target:"_blank",rel:"noopener noreferrer"}:{})} {...hint.props("portfolio")}>See portfolio</a>}
   </div>
   {!postsOpen&&!msgOpen&&<div className="spts-profile-hero-actions spts-hero-actions-2">
    <button type="button" className="spts-ghost" onClick={shareProfile} {...hint.props("share")}>{copied?<><Ico d={ICON.check}/> Link copied</>:"Share profile"}</button>
@@ -1485,7 +1485,7 @@ function UpgradeSuccess({user}:{user:User|null}){
   {status==="working"&&<><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Confirming your payment…</p></>}
   {status==="done"&&<>
    <h2>You're Premium</h2>
-   <p className="spts-muted">Your premium public-profile theme, direct file uploads and portfolio are unlocked.</p>
+   <p className="spts-muted">Your premium public-profile theme, direct file uploads and portfolio upload are unlocked.</p>
    <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
   </>}
   {status==="error"&&errKind==="flagged"&&<>
@@ -1508,11 +1508,15 @@ function UpgradeSuccess({user}:{user:User|null}){
  *
  * Firestore layout:
  *   profiles/{username}/ad/code          -> { html, startDate?, endDate? }
- *        Added by hand in the Firestore console. Profile owners never
- *        touch it. startDate / endDate are OPTIONAL "YYYY-MM-DD" strings
- *        (endDate is the last day the ad shows). Outside that window the
- *        ad counts as not live, so it "expires" and the owner can request
- *        again. Public read, no client writes.
+ *        Basic profiles: added by hand in the Firestore console after the
+ *        owner sends a request. Premium profiles: the owner uploads their
+ *        own .html file from the dashboard (PortfolioUpload), which writes
+ *        { html } to this same doc. startDate / endDate are OPTIONAL
+ *        "YYYY-MM-DD" strings (endDate is the last day the portfolio shows).
+ *        Outside that window it counts as not live, so it "expires" and a
+ *        basic owner can request again. Public read. Client writes: the
+ *        Premium owner of the profile only (see the rules note in the
+ *        hand-off), never anyone else.
  *   adrequest/{ownerUid}/messages/{id}   -> the owner's request
  *        { ownerId, username, fullName, mobile, message, durationDays,
  *          liveDate, endDate, status:"pending", createdAt }
@@ -1527,7 +1531,13 @@ const AD_DURATIONS=[
  {days:1,label:"1 day"},{days:3,label:"3 days"},{days:7,label:"1 week"},
  {days:14,label:"2 weeks"},{days:30,label:"1 month"},{days:90,label:"3 months"},
 ];
-const AD_CACHE_KEY="spts_ad_v1:",AD_LASTREQ_KEY="spts_adreq_v1:";
+const AD_CACHE_KEY="spts_ad_v1:",AD_LASTREQ_KEY="spts_adreq_v1:",AD_PREMIUM_KEY="spts_adpremium_v1:";
+// Premium owners upload their own portfolio: one .html file, strictly under 0.5 MB.
+const PORTFOLIO_MAX_BYTES=Math.floor(0.5*1024*1024);
+// Premium portfolios open as their own full page in a new tab. Scripts, forms, pop-ups, downloads and
+// modals work. allow-same-origin is deliberately NOT here: it would let uploaded code read the Firebase
+// session of every signed-in visitor (see the hand-off note).
+const PREMIUM_SANDBOX="allow-scripts allow-forms allow-modals allow-downloads allow-popups allow-popups-to-escape-sandbox";
 
 function todayLocal(){ return new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10); }
 function addDaysISO(iso:string,n:number){const d=new Date(`${iso}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
@@ -1561,8 +1571,40 @@ async function fetchAd(u:string):Promise<AdDoc|null>{
  const s=await getDoc(doc(profileDb,"profiles",u,"ad","code"));
  return s.exists()?parseAd(s.data()):null;
 }
+// Whether the profile is Premium decides how its portfolio opens (own tab vs. inside the app).
+function readPremiumCache(u:string):boolean|null{
+ try{const r=localStorage.getItem(AD_PREMIUM_KEY+u);return r===null?null:r==="1";}catch{return null;}
+}
+function writePremiumCache(u:string,v:boolean){ try{localStorage.setItem(AD_PREMIUM_KEY+u,v?"1":"0");}catch{} }
+async function fetchPremium(u:string):Promise<boolean>{
+ const s=await getDoc(doc(profileDb,"profiles",u));
+ return s.exists()&&s.data().premium===true;
+}
 // Warm the cache (used by the public profile so "See portfolio" opens instantly).
-function prefetchAd(u:string){ fetchAd(u).then(a=>writeAdCache(u,a)).catch(()=>{}); }
+function prefetchAd(u:string,premium?:boolean){
+ if(typeof premium==="boolean")writePremiumCache(u,premium);
+ fetchAd(u).then(a=>writeAdCache(u,a)).catch(()=>{});
+}
+
+// Premium upload: the file is checked, read as UTF-8 text and normalised (BOM and outer whitespace
+// removed) into the html string that goes into profiles/{username}/ad/code.
+function checkPortfolioFile(f:File):string{
+ if(!/\.html?$/i.test(f.name))return "Choose an .html file.";
+ if(f.size===0)return "That file is empty.";
+ if(f.size>=PORTFOLIO_MAX_BYTES)return "That file is too big. Keep it under 0.5 MB.";
+ return "";
+}
+async function readPortfolioFile(f:File):Promise<string>{
+ const bad=checkPortfolioFile(f);
+ if(bad)throw new Error(bad);
+ let html:string;
+ try{ html=new TextDecoder("utf-8",{fatal:true}).decode(await f.arrayBuffer()); }
+ catch{ throw new Error("Couldn't read that file. Save it as UTF-8 and try again."); }
+ html=html.replace(/^\uFEFF/,"").trim();
+ if(!/<[a-z!][^>]*>/i.test(html))throw new Error("That doesn't look like an HTML file.");
+ if(new TextEncoder().encode(html).length>=PORTFOLIO_MAX_BYTES)throw new Error("That file is too big. Keep it under 0.5 MB.");
+ return html;
+}
 
 // Last request the owner made — the "waiting period" is derived from it.
 type AdReqRec={startDate:string;endDate:string;createdMs:number};
@@ -1650,7 +1692,6 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
 
  async function submit(e:React.FormEvent){
   e.preventDefault();
-  if(!profile.premium)return setErr("Portfolio is for Premium users.");
   if(!name.trim())return setErr("Full name is required.");
   if(mobile.replace(/\D/g,"").length<7)return setErr("Enter a valid mobile number.");
   if(desc.trim().length<AD_MIN_DESC)return setErr(`Describe the portfolio in at least ${AD_MIN_DESC} characters.`);
@@ -1722,16 +1763,83 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
  </div>;
 }
 
-/* Dashboard card. Portfolio is Premium-only: everyone else sees an upgrade prompt. */
-function AdRequest({user,profile}:{user:User;profile:any}){
- if(!profile.premium)return <section className="spts-card">
-  <div className="spts-card-head"><h2>Portfolio</h2><span className="spts-premium-tag spts-premium-tag-sm">Premium</span></div>
-  <p className="spts-muted">Portfolio is for Premium users.</p>
-  <div className="spts-ad-actions">
-   <UpgradeButton user={user}/>
-  </div>
+/* Premium: the owner adds their own portfolio. Uploads one .html file (under 0.5 MB); it is checked and
+ * saved to profiles/{username}/ad/code as { html }, the same place and shape as a portfolio added by hand. */
+function PortfolioUpload({profile}:{profile:any}){
+ const toast=useToast();const confirm=useConfirm();
+ const [ad,setAd]=useState<AdDoc|null>(()=>readAdCache(profile.username));
+ const [file,setFile]=useState<File|null>(null),[fileErr,setFileErr]=useState(""),[err,setErr]=useState("");
+ const [busy,setBusy]=useState(false),[removing,setRemoving]=useState(false);
+ const inputRef=useRef<HTMLInputElement>(null);
+ const adRef=doc(profileDb,"profiles",profile.username,"ad","code");
+
+ useEffect(()=>{
+  let alive=true;
+  fetchAd(profile.username).then(a=>{ if(!alive)return; writeAdCache(profile.username,a); setAd(a); }).catch(()=>{});
+  return ()=>{alive=false};
+ },[profile.username]);
+
+ const phase=ad?adPhase(ad,todayLocal()):null;
+ const badge=phase==="live"?"Live":phase==="scheduled"?"Scheduled":phase==="expired"?"Expired":"";
+
+ function pick(e:React.ChangeEvent<HTMLInputElement>){
+  const f=e.target.files?.[0]||null;
+  setErr("");setFile(f);setFileErr(f?checkPortfolioFile(f):"");
+ }
+ async function upload(e:React.FormEvent){
+  e.preventDefault();
+  if(!file)return;
+  setErr("");setBusy(true);
+  try{
+   const html=await readPortfolioFile(file);
+   await setDoc(adRef,{html});
+   const next:AdDoc={html};
+   writeAdCache(profile.username,next);setAd(next);
+   setFile(null);setFileErr("");if(inputRef.current)inputRef.current.value="";
+   toast("success","Portfolio published.");
+  }catch(x:any){ setErr(fail(toast,x,"Unable to publish portfolio")); }
+  finally{ setBusy(false); }
+ }
+ async function remove(){
+  const ok=await confirm({
+   title:"Remove your portfolio?",
+   body:<p className="spts-muted">This deletes the page you uploaded. Your profile and posts are not affected, and you can upload again any time.</p>,
+   confirmLabel:"Remove portfolio",danger:true,
+  });
+  if(!ok)return;
+  setRemoving(true);setErr("");
+  try{ await deleteDoc(adRef); writeAdCache(profile.username,null); setAd(null); toast("success","Portfolio removed."); }
+  catch(x:any){ setErr(fail(toast,x,"Unable to remove portfolio")); }
+  finally{ setRemoving(false); }
+ }
+
+ return <section className="spts-card">
+  <div className="spts-card-head"><h2>Portfolio</h2>{badge&&phase?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
+  <p className="spts-muted">
+   {!ad&&<>Upload an HTML file to publish your own portfolio. No request needed.</>}
+   {phase==="live"&&<>Your portfolio is live. Uploading again replaces it.</>}
+   {phase==="scheduled"&&<>Your portfolio goes live {ad?.startDate?`on ${prettyDate(ad.startDate)}`:"soon"}. Uploading again replaces it and publishes right away.</>}
+   {phase==="expired"&&<>Your last portfolio expired{ad?.endDate?` on ${prettyDate(ad.endDate)}`:""}. Upload again to publish.</>}
+  </p>
+  <form onSubmit={upload}>
+   <label className="spts-fileupload-row">HTML file, under 0.5 MB
+    <input ref={inputRef} type="file" accept=".html,.htm,text/html" onChange={pick} disabled={busy||removing}/>
+   </label>
+   {fileErr&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{fileErr}</span></div>}
+   {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span><ErrText text={err}/></span></div>}
+   <div className="spts-ad-actions">
+    <SpinnerButton type="submit" busy={busy} busyLabel="Publishing…" disabled={!file||!!fileErr||removing}>{ad?"Replace portfolio":"Upload portfolio"}</SpinnerButton>
+    {ad&&<SpinnerButton className="spts-danger" busy={removing} busyLabel="Removing…" disabled={busy} onClick={remove}>Remove</SpinnerButton>}
+    {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`} target="_blank" rel="noopener noreferrer">View portfolio</a>}
+   </div>
+  </form>
+  <p className="spts-muted">Opens in its own tab. Scripts and forms work; cookies and local storage aren't available to the page.</p>
  </section>;
- return <AdRequestCard user={user} profile={profile}/>;
+}
+
+/* Dashboard card. Basic profiles request a portfolio; Premium profiles upload their own. */
+function AdRequest({user,profile}:{user:User;profile:any}){
+ return profile.premium?<PortfolioUpload profile={profile}/>:<AdRequestCard user={user} profile={profile}/>;
 }
 
 const BADGE_HINT:Record<string,HintKey>={live:"adLive",scheduled:"adScheduled",waiting:"adWaiting",expired:"adExpired"};
@@ -1757,6 +1865,7 @@ function AdRequestCard({user,profile}:{user:User;profile:any}){
    <button type="button" disabled={blocked} onClick={()=>setOpen(true)}>Request portfolio</button>
    {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>See portfolio</a>}
   </div>
+  <p className="spts-muted">Premium members upload their own portfolio and it opens in its own tab.</p>
   {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setBump(b=>b+1);}}/>}
  </section>;
 }
@@ -1769,15 +1878,15 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
  if(authLoading||(user&&loading))return <button type="button" disabled>Request portfolio</button>;
  if(!user)return <>
   <a className="spts-ad-link spts-ad-cta" href="/profiles">Request portfolio</a>
-  <p className="spts-muted">Portfolio is Premium-only. Create a profile first, then upgrade.</p>
+  <p className="spts-muted">Create a profile first, then request your portfolio.</p>
  </>;
  if(!profile)return <>
   <a className="spts-ad-link spts-ad-cta" href="/profiles">Create your profile</a>
-  <p className="spts-muted">Portfolio is Premium-only. You need a profile first.</p>
+  <p className="spts-muted">You need a profile first.</p>
  </>;
- if(!profile.premium)return <>
-  <UpgradeButton user={user} className="spts-ad-link"/>
-  <p className="spts-muted">Portfolio is for Premium users.</p>
+ if(profile.premium)return <>
+  <a className="spts-ad-link spts-ad-cta" href="/">Add your portfolio</a>
+  <p className="spts-muted">Premium: upload your own HTML file from your dashboard.</p>
  </>;
  return <>
   <button type="button" onClick={()=>setOpen(true)}>Request portfolio</button>
@@ -1785,13 +1894,15 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
  </>;
 }
 
-// Public portfolio page (route + Firestore names still say "ad"). Runs the html string in a sandboxed iframe (no
-// allow-same-origin), so the ad code can't reach this app's auth session,
-// storage or DOM. A cached copy renders on the very first paint (no loading
-// screen); Firestore then refreshes it silently.
+// Public portfolio page (route + Firestore names still say "ad"). Runs the html string in a sandboxed iframe
+// (no allow-same-origin), so the code can't reach this app's auth session, storage or DOM.
+//  - Basic profiles: inside the app, under a small bar, with the tight sandbox.
+//  - Premium profiles: their own full page (this page is opened in a new tab), with a wider sandbox.
+// A cached copy renders on the very first paint (no loading screen); Firestore then refreshes it silently.
 function AdView({username,user,authLoading}:{username:string;user:User|null;authLoading:boolean}){
  const uname=normalizeUsername(username);
  const [ad,setAd]=useState<AdDoc|null>(()=>typeof window!=="undefined"?readAdCache(uname):null);
+ const [premium,setPremium]=useState<boolean|null>(()=>typeof window!=="undefined"?readPremiumCache(uname):null);
  const [settled,setSettled]=useState(false),[failed,setFailed]=useState(false),[failedText,setFailedText]=useState(ACCESS_GENERIC),[tries,setTries]=useState(0);
  const [copied,setCopied]=useState(false);
  const toast=useToast();
@@ -1805,10 +1916,11 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  useEffect(()=>{
   let alive=true;
   setFailed(false);
-  fetchAd(uname).then(a=>{
+  Promise.all([fetchAd(uname),fetchPremium(uname).catch(()=>false)]).then(([a,pr])=>{
    if(!alive)return;
-   writeAdCache(uname,a);
+   writeAdCache(uname,a);writePremiumCache(uname,pr);
    setAd(prev=>sameAd(prev,a)?prev:a); // unchanged ad => no iframe reload
+   setPremium(pr);
    setSettled(true);
   }).catch((e:any)=>{
    if(!alive)return;
@@ -1819,19 +1931,33 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  },[uname,tries]);
 
  const live=!!ad&&adPhase(ad,todayLocal())==="live";
+ const standalone=live&&premium===true;
+ useEffect(()=>{ if(standalone)document.title=`@${uname} · Portfolio`; },[standalone,uname]);
 
+ if(standalone)return <main className="spts-ad spts-ad-standalone">
+  <iframe
+   className="spts-ad-frame"
+   title={`Portfolio by @${uname}`}
+   srcDoc={ad!.html}
+   sandbox={PREMIUM_SANDBOX}
+   referrerPolicy="no-referrer"
+  />
+ </main>;
+
+ const known=premium!==null||settled; // don't flash the app bar before we know which layout applies
  return <main className="spts-ad">
-  <header className="spts-ad-bar">
+  {known&&<header className="spts-ad-bar">
    <a className="spts-ghost spts-link-btn" href={`/profile/${uname}`}><Ico d={ICON.back}/> @{uname}</a>
    <button type="button" className="spts-ghost" onClick={copyLink}>{copied?<><Ico d={ICON.check}/> Copied</>:"Copy link"}</button>
-  </header>
-  {live&&<iframe
+  </header>}
+  {live&&premium===false&&<iframe
    className="spts-ad-frame"
    title={`Portfolio by @${uname}`}
    srcDoc={ad!.html}
    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
    referrerPolicy="no-referrer"
   />}
+  {live&&premium===null&&<div className="spts-ad-frame spts-ad-blank"/>}
   {!live&&!settled&&<div className="spts-ad-frame spts-ad-blank"/>}
   {!live&&settled&&!failed&&<div className="spts-public-status">
    <h1>Portfolio not found</h1>
