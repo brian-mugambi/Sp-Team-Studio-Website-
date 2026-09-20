@@ -1,5 +1,5 @@
 import React, {useEffect,useMemo,useRef,useState} from "react";
-import {createUserWithEmailAndPassword,onAuthStateChanged,signInWithEmailAndPassword,signOut,User} from "firebase/auth";
+import {createUserWithEmailAndPassword,onAuthStateChanged,sendPasswordResetEmail,signInWithEmailAndPassword,signOut,User} from "firebase/auth";
 import {addDoc,collection,deleteDoc,doc,getDoc,getDocs,increment,limit,onSnapshot,orderBy,query,serverTimestamp,setDoc,where,writeBatch} from "firebase/firestore";
 import {getDownloadURL,getStorage,ref as storageRef,uploadBytes} from "firebase/storage";
 import {profileAuth,profileDb} from "../firebase/profileFirebase";
@@ -592,7 +592,20 @@ async function runTTLSweep(){
  * ------------------------------------------------------------------ */
 function Auth({done}:{done:()=>void}){
  const [signup,setSignup]=useState(true),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[err,setErr]=useState(""),[busy,setBusy]=useState(false);
+ const [resetting,setResetting]=useState(false);
  const toast=useToast();
+ // Firebase emails a reset link. The message is the same whether or not the address has an account.
+ async function reset(){
+  setErr("");
+  const to=email.trim();
+  if(!to){setErr("Enter your email above, then tap Reset password.");return;}
+  if(!/^\S+@\S+\.\S+$/.test(to)){setErr("Enter a valid email address.");return;}
+  setResetting(true);
+  const sent=()=>toast("success",`If an account exists for ${to}, a reset link is on its way. Check spam too.`);
+  try{ await sendPasswordResetEmail(profileAuth,to);sent(); }
+  catch(x:any){ if(x?.code==="auth/user-not-found")sent(); else setErr(fail(toast,x,"Unable to send reset link")); }
+  finally{ setResetting(false); }
+ }
  async function go(e:React.FormEvent){e.preventDefault();setErr("");setBusy(true);try{
   if(signup)await createUserWithEmailAndPassword(profileAuth,email,password);
   else await signInWithEmailAndPassword(profileAuth,email,password);
@@ -605,7 +618,8 @@ function Auth({done}:{done:()=>void}){
  <label>Password<input type="password" required minLength={6} placeholder="At least 6 characters" value={password} onChange={e=>setPassword(e.target.value)} disabled={busy}/></label>
  <SpinnerButton type="submit" busy={busy} busyLabel={signup?"Creating…":"Logging in…"}>{signup?"Sign up":"Log in"}</SpinnerButton>
  </form>{err&&<p className="spts-error"><ErrText text={err}/></p>}
- <button className="spts-link" onClick={()=>setSignup(!signup)} disabled={busy}>{signup?"Already registered? Log in":"Create an account"}</button></section>
+ {!signup&&<p><button type="button" className="spts-link" onClick={reset} disabled={busy||resetting}>{resetting?"Sending link…":"Reset password"}</button></p>}
+ <button className="spts-link" onClick={()=>setSignup(!signup)} disabled={busy||resetting}>{signup?"Already registered? Log in":"Create an account"}</button></section>
 }
 
 /* ------------------------------------------------------------------ *
@@ -1531,8 +1545,9 @@ function UpgradeSuccess({user}:{user:User|null}){
  *   profiles/{username}/ad/code          -> { html, startDate?, endDate? }
  *        Basic profiles: added by hand in the Firestore console after the
  *        owner sends a request. Premium profiles: the owner uploads their
- *        own .html file from the dashboard (PortfolioUpload), which writes
- *        { html } to this same doc. startDate / endDate are OPTIONAL
+ *        own .html file from the dashboard (PortfolioUpload), choosing a
+ *        duration of at least 1 week; that writes { html, startDate, endDate }
+ *        to this same doc, and Remove stays disabled while it is live. startDate / endDate are OPTIONAL
  *        "YYYY-MM-DD" strings (endDate is the last day the portfolio shows).
  *        Outside that window it counts as not live, so it "expires" and a
  *        basic owner can request again. Public read. Client writes: the
@@ -1552,6 +1567,8 @@ const AD_DURATIONS=[
  {days:1,label:"1 day"},{days:3,label:"3 days"},{days:7,label:"1 week"},
  {days:14,label:"2 weeks"},{days:30,label:"1 month"},{days:90,label:"3 months"},
 ];
+// Premium portfolios run for a set duration like basic ones, but never less than one week.
+const PORTFOLIO_DURATIONS=AD_DURATIONS.filter(d=>d.days>=7);
 const AD_CACHE_KEY="spts_ad_v1:",AD_LASTREQ_KEY="spts_adreq_v1:",AD_PREMIUM_KEY="spts_adpremium_v1:";
 // Premium owners upload their own portfolio: one .html file, strictly under 0.5 MB.
 const PORTFOLIO_MAX_BYTES=Math.floor(0.5*1024*1024);
@@ -1787,6 +1804,7 @@ function PortfolioUpload({profile}:{profile:any}){
  const [ad,setAd]=useState<AdDoc|null>(()=>readAdCache(profile.username));
  const [file,setFile]=useState<File|null>(null),[fileErr,setFileErr]=useState(""),[err,setErr]=useState("");
  const [busy,setBusy]=useState(false),[removing,setRemoving]=useState(false);
+ const [days,setDays]=useState(7);
  const inputRef=useRef<HTMLInputElement>(null);
  const adRef=doc(profileDb,"profiles",profile.username,"ad","code");
 
@@ -1798,6 +1816,8 @@ function PortfolioUpload({profile}:{profile:any}){
 
  const phase=ad?adPhase(ad,todayLocal()):null;
  const badge=phase==="live"?"Live":phase==="scheduled"?"Scheduled":phase==="expired"?"Expired":"";
+ // Once a portfolio with a set duration goes live it can't be removed until that duration ends.
+ const locked=phase==="live"&&!!ad?.endDate;
 
  function pick(e:React.ChangeEvent<HTMLInputElement>){
   const f=e.target.files?.[0]||null;
@@ -1809,15 +1829,26 @@ function PortfolioUpload({profile}:{profile:any}){
   setErr("");setBusy(true);
   try{
    const html=await readPortfolioFile(file);
-   await setDoc(adRef,{html});
-   const next:AdDoc={html};
+   // Same doc and shape as a portfolio added by hand: { html, startDate, endDate }.
+   // While a duration is running, replacing the page keeps its dates; otherwise a new run starts today.
+   const data:Record<string,string>={html};
+   if(locked&&ad){
+    if(ad.startDate)data.startDate=ad.startDate;
+    if(ad.endDate)data.endDate=ad.endDate;
+   }else{
+    const t=todayLocal();
+    data.startDate=t;data.endDate=endDateFor(t,days);
+   }
+   await setDoc(adRef,data);
+   const next=parseAd(data)!;
    writeAdCache(profile.username,next);setAd(next);
    setFile(null);setFileErr("");if(inputRef.current)inputRef.current.value="";
-   toast("success","Portfolio published.");
+   toast("success",locked?"Portfolio updated.":`Portfolio is live until ${prettyDate(data.endDate)}.`);
   }catch(x:any){ setErr(fail(toast,x,"Unable to publish portfolio")); }
   finally{ setBusy(false); }
  }
  async function remove(){
+  if(locked)return;
   const ok=await confirm({
    title:"Remove your portfolio?",
    body:<p className="spts-muted">This deletes the page you uploaded. Your profile and posts are not affected, and you can upload again any time.</p>,
@@ -1833,20 +1864,26 @@ function PortfolioUpload({profile}:{profile:any}){
  return <section className="spts-card">
   <div className="spts-card-head"><h2>Portfolio</h2>{badge&&phase?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
   <p className="spts-muted">
-   {!ad&&<>Upload an HTML file to publish your own portfolio. No request needed.</>}
-   {phase==="live"&&<>Your portfolio is live. Uploading again replaces it.</>}
+   {!ad&&<>Upload an HTML file and choose how long it stays live (1 week or more). No request needed.</>}
+   {phase==="live"&&locked&&ad?.endDate&&<>Your portfolio is live until {prettyDate(ad.endDate)} and can't be removed before then. Uploading again replaces the page and keeps the same dates.</>}
+   {phase==="live"&&!locked&&<>Your portfolio is live. Uploading again replaces it.</>}
    {phase==="scheduled"&&<>Your portfolio goes live {ad?.startDate?`on ${prettyDate(ad.startDate)}`:"soon"}. Uploading again replaces it and publishes right away.</>}
-   {phase==="expired"&&<>Your last portfolio expired{ad?.endDate?` on ${prettyDate(ad.endDate)}`:""}. Upload again to publish.</>}
+   {phase==="expired"&&<>Your last portfolio expired{ad?.endDate?` on ${prettyDate(ad.endDate)}`:""}. Upload again to publish for a new duration.</>}
   </p>
   <form onSubmit={upload}>
    <label className="spts-fileupload-row">HTML file, under 0.5 MB
     <input ref={inputRef} type="file" accept=".html,.htm,text/html" onChange={pick} disabled={busy||removing}/>
    </label>
+   {!locked&&<label>Duration
+    <select value={days} onChange={e=>setDays(Number(e.target.value))} disabled={busy||removing}>
+     {PORTFOLIO_DURATIONS.map(d=><option key={d.days} value={d.days}>{d.label}</option>)}
+    </select>
+   </label>}
    {fileErr&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span>{fileErr}</span></div>}
    {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span><ErrText text={err}/></span></div>}
    <div className="spts-ad-actions">
     <SpinnerButton type="submit" busy={busy} busyLabel="Publishing…" disabled={!file||!!fileErr||removing}>{ad?"Replace portfolio":"Upload portfolio"}</SpinnerButton>
-    {ad&&<SpinnerButton className="spts-danger" busy={removing} busyLabel="Removing…" disabled={busy} onClick={remove}>Remove</SpinnerButton>}
+    {ad&&<SpinnerButton className="spts-danger" busy={removing} busyLabel="Removing…" disabled={busy||locked} onClick={remove} title={locked&&ad.endDate?`Locked until ${prettyDate(ad.endDate)}`:undefined}>Remove</SpinnerButton>}
     {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>View portfolio</a>}
    </div>
   </form>

@@ -2068,3 +2068,8 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
   .spts-public .spts-profile-panel-chat .spts-error-box{flex:none;}
 }
 
+
+/* Duration select in dashboard cards (portfolio upload). */
+.spts-page .spts-card select{padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;}
+.spts-page .spts-card select:focus{outline:none;border-color:var(--cyan);}
+.spts-page .spts-card select:disabled{opacity:.6;cursor:not-allowed;}
