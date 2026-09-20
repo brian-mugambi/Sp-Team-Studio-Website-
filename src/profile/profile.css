@@ -28,7 +28,7 @@
 .spts-link{background:none;text-decoration:underline;color:var(--cyan);padding:0;}
 .spts-post-actions{display:flex;gap:10px;align-items:center;margin:10px 0;}
 .spts-post-actions button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;}
-.spts-post-actions .spts-liked{color:#e0245e;border-color:#e0245e;}
+.spts-post-actions .spts-liked{color:var(--violet);border-color:var(--violet);}
 .spts-comments{display:flex;flex-direction:column;gap:8px;}
 .spts-comment{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--faintest);}
 .spts-comments form{display:flex;gap:8px;margin-top:6px;}
@@ -51,7 +51,7 @@
 .spts-replies{flex-basis:100%;margin:6px 0 4px 0;padding-left:12px;border-left:2px solid var(--faintest);display:flex;flex-direction:column;gap:6px;}
 .spts-reply{display:flex;align-items:flex-start;gap:10px;padding:6px 10px;border-radius:9px;background:rgba(255,255,255,0.02);border:1px solid var(--faintest);}
 .spts-reply p{flex:1;color:var(--white);font-size:0.9rem;line-height:1.4;word-break:break-word;}
-.spts-reply-owner{background:rgba(0,229,255,0.05);border-color:rgba(0,229,255,0.2);}
+.spts-reply-owner{background:rgba(34,211,238,0.05);border-color:rgba(34,211,238,0.2);}
 .spts-reply-visitor{background:rgba(255,255,255,0.03);}
 .spts-reply-role{font-size:0.65rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);min-width:52px;padding-top:2px;}
 .spts-reply button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;padding:4px 8px;font-size:0.75rem;}
@@ -64,12 +64,14 @@
  * ------------------------------------------------------------------ */
 .spts-toast-host{position:fixed;top:16px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:1000;max-width:min(380px,90vw);}
 .spts-toast{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:rgba(20,20,30,0.95);color:var(--white);font-size:0.85rem;cursor:pointer;animation:spts-toast-in .18s ease-out;box-shadow:0 8px 24px rgba(0,0,0,.35);}
-.spts-toast-icon{display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;border-radius:50%;font-weight:700;font-size:0.7rem;flex:0 0 auto;}
-.spts-toast-success{border-color:rgba(0,229,255,0.4);}
-.spts-toast-success .spts-toast-icon{background:var(--cyan);color:#06060f;}
-.spts-toast-error{border-color:#ff6b81;}
-.spts-toast-error .spts-toast-icon{background:#ff6b81;color:#06060f;}
-.spts-toast-info .spts-toast-icon{background:var(--faint);color:var(--white);}
+.spts-toast-icon{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border:1px solid currentColor;border-radius:2px;font-weight:700;font-size:0.66rem;line-height:1;flex:0 0 auto;}
+.spts-toast-icon .spts-ico{width:11px;height:11px;}
+.spts-toast.spts-toast-success{border-left:2px solid var(--cyan);}
+.spts-toast-success .spts-toast-icon{color:var(--cyan);}
+.spts-toast.spts-toast-error{border-left:2px solid #ff6b81;}
+.spts-toast-error .spts-toast-icon{color:#ff6b81;}
+.spts-toast.spts-toast-info{border-left:2px solid var(--violet);}
+.spts-toast-info .spts-toast-icon{color:#bcaeff;}
 @keyframes spts-toast-in{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
 
 /* ------------------------------------------------------------------ *
@@ -173,28 +175,27 @@
 /* Error box (public-facing) */
 .spts-error-box{
  display:flex;align-items:flex-start;gap:10px;
- margin-top:12px;padding:10px 12px;border-radius:10px;
- background:rgba(255,107,129,0.08);border:1px solid rgba(255,107,129,0.35);
- color:#ff6b81;font-size:0.85rem;line-height:1.4;
+ margin-top:12px;padding:9px 12px;border:1px solid var(--line);border-left:2px solid #ff6b81;border-radius:2px;
+ background:rgba(255,107,129,0.045);color:var(--white);font-size:0.8rem;line-height:1.5;
 }
 .spts-error-icon{
  flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
- width:18px;height:18px;border-radius:50%;background:#ff6b81;color:#06060f;
- font-weight:800;font-size:0.7rem;
+ width:16px;height:16px;border:1px solid #ff6b81;border-radius:2px;color:#ff6b81;
+ font-weight:700;font-size:0.66rem;line-height:1;
 }
 
 /* Auto-delete (24h TTL) notices — friendly amber warning tone,
  * distinct from the red error style above. */
 .spts-ttl-notice{
- display:flex;align-items:flex-start;gap:6px;
- margin:8px 0;padding:8px 12px;border-radius:9px;
- background:rgba(255,184,92,0.08);border:1px solid rgba(255,184,92,0.3);
- color:#ffb85c;font-size:0.76rem;line-height:1.5;
+ display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;
+ margin:10px 0;padding:9px 12px;border:1px solid var(--line);border-left:2px solid var(--cyan);border-radius:2px;
+ background:rgba(34,211,238,0.035);color:var(--muted);font-size:0.76rem;line-height:1.55;
 }
+.spts-ttl-notice .spts-hint{color:var(--cyan);font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;}
 .spts-ttl-notice-sm{
- display:block;margin:4px 0 2px;
- color:#ffb85c;opacity:0.85;font-size:0.7rem;line-height:1.4;
+ display:block;margin:6px 0 2px;color:var(--faint);font-size:0.7rem;line-height:1.5;
 }
+.spts-ttl-notice-sm .spts-hint{color:var(--cyan);}
 
 /* Small screens */
 @media (max-width:480px){
@@ -332,9 +333,10 @@ video.spts-media-el{cursor:pointer;}
 
 /* Restricted-account notice (upgrade flow) + toast link */
 .spts-toast-action{color:var(--cyan);text-decoration:underline;font-weight:600;}
-.spts-flag-notice{display:grid;gap:10px;text-align:left;padding:12px 14px;border-radius:10px;background:rgba(255,184,92,0.08);border:1px solid rgba(255,184,92,0.3);color:var(--muted);font-size:0.85rem;line-height:1.5;}
+.spts-flag-notice{display:grid;gap:12px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-left:2px solid var(--violet);border-radius:2px;background:rgba(124,92,255,0.06);color:var(--muted);font-size:0.82rem;line-height:1.6;}
+.spts-flag-notice > p:first-child{color:var(--white);}
 .spts-flag-notice ul{margin:4px 0 0 18px;padding:0;display:grid;gap:3px;}
-.spts-flag-h{font-size:0.72rem;letter-spacing:0.05em;text-transform:uppercase;color:#ffb85c;}
+.spts-flag-h{font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:#bcaeff;}
 .spts-flag-h.spts-flag-ok{color:var(--cyan);}
 
 /* ==================================================================== *
@@ -419,7 +421,7 @@ video.spts-media-el{cursor:pointer;}
 .spts-comments .spts-comment p{margin:0;font-size:0.78rem;line-height:1.4;color:var(--muted);word-break:break-word;}
 .spts-comment-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
 .spts-comment-actions button{padding:2px 8px;font-size:0.7rem;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;font-weight:400;}
-.spts-comment-actions .spts-liked{color:#e0245e;border-color:#e0245e;}
+.spts-comment-actions .spts-liked{color:var(--violet);border-color:var(--violet);}
 .spts-comments input{font-size:0.8rem;padding:8px;}
 
 /* Upgrade button is a <button> now: beat the generic button styles */
@@ -800,8 +802,8 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
 }
 
 .spts-post-actions .spts-liked {
-  color: #e0245e;
-  border-color: rgba(224,36,94,.55);
+  color: var(--violet);
+  border-color: rgba(124,92,255,.55);
 }
 
 .spts-post-grid {
@@ -1249,6 +1251,7 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
   background: rgba(6,6,15,.94);
   color: var(--white);
   font-size: .78rem;
+  line-height: 1.5;
   box-shadow: 0 18px 45px rgba(0,0,0,.35);
   backdrop-filter: blur(8px);
   cursor: pointer;
@@ -1648,7 +1651,7 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
 .spts-public .spts-chat-compose {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) 44px !important;
-  align-items: center !important;
+  align-items: end !important;
   gap: 10px !important;
   margin: 0 !important;
   padding: 14px 0 0 !important;
@@ -1658,9 +1661,9 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
 .spts-public .spts-chat-compose textarea {
   width: 100% !important;
   min-width: 0 !important;
-  height: 44px !important;
   min-height: 44px !important;
-  max-height: 44px !important;
+  max-height: 140px !important;
+  overflow-y: auto;
   margin: 0 !important;
   padding: 10px 14px !important;
   resize: none !important;
@@ -1679,7 +1682,7 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
   max-height: 44px !important;
   margin: 0 !important;
   padding: 0 !important;
-  align-self: center !important;
+  align-self: end !important;
   justify-self: stretch !important;
   display: flex !important;
   align-items: center !important;
@@ -1931,3 +1934,46 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
     color: #f5f7fa !important;
   }
 }
+
+
+/* ================================================================
+   HINTS, "SEE MORE", ICONS, GROWING FIELDS
+   ================================================================ */
+
+/* Inline SVG icons (replace emoji / symbol characters). */
+.spts-ico{width:1.05em;height:1.05em;flex:none;vertical-align:-.16em;overflow:visible;}
+
+/* Words and badges that explain themselves in a toast on tap / hover. */
+.spts-hint{cursor:help;}
+.spts-hint-word{border-bottom:1px dotted currentColor;}
+.spts-hint:focus-visible{outline:1px solid var(--cyan);outline-offset:2px;}
+
+/* "See more" / "See less" on long text: an inline link, not a button box. */
+.spts-page button.spts-clamp-btn,
+.spts-public button.spts-clamp-btn{
+  display:inline;min-height:0;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;
+  background:transparent!important;color:var(--cyan)!important;-webkit-text-fill-color:var(--cyan);
+  font:inherit;font-size:.9em;font-weight:500;letter-spacing:.02em;
+  text-decoration:underline;text-underline-offset:3px;
+}
+.spts-page button.spts-clamp-btn:hover,
+.spts-public button.spts-clamp-btn:hover{
+  border:0;box-shadow:none;background:transparent!important;
+  color:var(--white)!important;-webkit-text-fill-color:var(--white);
+}
+.spts-public.spts-premium button.spts-clamp-btn{color:#ffc55c!important;-webkit-text-fill-color:#ffc55c;}
+.spts-public.spts-premium button.spts-clamp-btn:hover{color:var(--white)!important;-webkit-text-fill-color:var(--white);}
+
+/* Character counter under comment fields. */
+.spts-field-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:4px;color:var(--faint);font-size:.66rem;}
+
+/* Comment and reply fields grow with their text (up to a cap), then scroll. */
+.spts-comments textarea,
+.spts-reply-form textarea{
+  flex:1 1 auto;min-width:0;min-height:38px;padding:9px 10px;
+  border:1px solid var(--line);border-radius:2px;background:rgba(6,6,15,.7);
+  color:var(--white);font:inherit;font-size:.8rem;line-height:1.45;
+  resize:none;overflow-y:auto;
+}
+.spts-comments textarea:focus,
+.spts-reply-form textarea:focus{outline:0;border-color:var(--cyan);}

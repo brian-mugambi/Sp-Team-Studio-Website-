@@ -3,7 +3,7 @@ import {createUserWithEmailAndPassword,onAuthStateChanged,signInWithEmailAndPass
 import {addDoc,collection,deleteDoc,doc,getDoc,getDocs,increment,limit,onSnapshot,orderBy,query,serverTimestamp,setDoc,where,writeBatch} from "firebase/firestore";
 import {getDownloadURL,getStorage,ref as storageRef,uploadBytes} from "firebase/storage";
 import {profileAuth,profileDb} from "../firebase/profileFirebase";
-import {MAX_MESSAGES,MAX_POSTS,MIN_MESSAGE,MAX_MESSAGE,MAX_REPLIES_PER_MESSAGE,MIN_REPLY,MAX_REPLY,detectContacts,mediaTypeFromUrl,normalizeUsername,validMediaUrl,validMessage,validUsername} from "./validators";
+import {MAX_MESSAGES,MAX_POSTS,MAX_REPLIES_PER_MESSAGE,detectContacts,mediaTypeFromUrl,normalizeUsername,validMediaUrl,validUsername} from "./validators";
 import {encryptMessage,decryptMessage,getDeviceId} from "./crypto";
 import "./profile.css";
 
@@ -20,6 +20,13 @@ import "./profile.css";
  * ------------------------------------------------------------------ */
 const profileStorage=getStorage(profileAuth.app);
 const PAYSTACK_UPGRADE_URL="https://paystack.shop/pay/bv5n43khmv";
+
+/* Text limits (set here, not in validators). Messages and replies: 1-2500. Comments: 1-1000.
+ * Longer text is clamped on screen: the first CLAMP_CHARS characters show, then "See more".
+ * If your Firestore rules also cap text length, raise them to match. */
+const MSG_MIN=1,MSG_MAX=2500;
+const COMMENT_MIN=1,COMMENT_MAX=1000;
+const CLAMP_CHARS=500;
 
 /* Support on WhatsApp — the number is never shown; users only see "Contact support".
  * wa.me needs the number in international format, so set SUPPORT_COUNTRY_CODE
@@ -132,27 +139,105 @@ function AccountFlagNotice({uid,showSupport=true}:{uid?:string;showSupport?:bool
  * every async action a visible loading state.
  * ------------------------------------------------------------------ */
 
-type Toast = { id: number; kind: "success"|"error"|"info"; text: string; action?: {label:string;href:string} };
-const ToastCtx = React.createContext<(kind: Toast["kind"], text: string, action?: Toast["action"])=>void>(()=>{});
+/* Icons: small inline SVGs (currentColor), so the app has no emoji or font-dependent symbols. */
+function Ico({d,filled}:{d:string;filled?:boolean}){
+ return <svg className="spts-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={d} fill={filled?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+}
+const ICON={
+ heart:"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z",
+ play:"M7 4.5v15l12-7.5z",
+ expand:"M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7",
+ close:"M18 6L6 18M6 6l12 12",
+ send:"M22 2L11 13M22 2l-7 20-4-9-9-4z",
+ check:"M20 6L9 17l-5-5",
+ back:"M19 12H5M12 19l-7-7 7-7",
+ next:"M5 12h14M12 5l7 7-7 7",
+};
+
+type Toast = { id: number; kind: "success"|"error"|"info"; text: string; action?: {label:string;href:string}; key?: string };
+type PushToast = (kind: Toast["kind"], text: string, action?: Toast["action"], key?: string)=>void;
+const ToastCtx = React.createContext<PushToast>(()=>{});
 function useToast(){ return React.useContext(ToastCtx); }
 
 function ToastHost({children}:{children?:React.ReactNode}){
  const [items,setItems]=useState<Toast[]>([]);
  const idRef=useRef(0);
- function push(kind:Toast["kind"],text:string,action?:Toast["action"]){
+ // A toast with a key never stacks on itself, and a new hint (key "hint:…") replaces the previous hint.
+ const push=React.useCallback<PushToast>((kind,text,action,key)=>{
   const id=++idRef.current;
-  setItems(s=>[...s,{id,kind,text,action}]);
-  setTimeout(()=>setItems(s=>s.filter(t=>t.id!==id)),action?9000:4200); // toasts with a link stay longer
- }
+  setItems(s=>{
+   if(key&&s.some(t=>t.key===key))return s;
+   const keep=key?.startsWith("hint:")?s.filter(t=>!t.key?.startsWith("hint:")):s;
+   return [...keep,{id,kind,text,action,key}];
+  });
+  setTimeout(()=>setItems(s=>s.filter(t=>t.id!==id)),action?9000:key?5500:4200); // links and hints stay longer
+ },[]);
  return <ToastCtx.Provider value={push}>
   {children}
   <div className="spts-toast-host" role="status" aria-live="polite">
    {items.map(t=><div key={t.id} className={`spts-toast spts-toast-${t.kind}`} onClick={()=>setItems(s=>s.filter(x=>x.id!==t.id))}>
-    <span className="spts-toast-icon">{t.kind==="success"?"✓":t.kind==="error"?"!":"i"}</span>
+    <span className="spts-toast-icon">{t.kind==="success"?<Ico d={ICON.check}/>:t.kind==="error"?"!":"i"}</span>
     <span>{t.text}{t.action&&<> <a className="spts-toast-action" href={t.action.href} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{t.action.label}</a></>}</span>
    </div>)}
   </div>
  </ToastCtx.Provider>;
+}
+
+/* ------------------------------------------------------------------ *
+ * Hints: tap or hover an ambiguous word, or hover a contact button, and a toast says what it means.
+ * Words and badges answer to tap and hover. Buttons and links answer to mouse hover and keyboard
+ * focus only, because tapping them already does something.
+ * ------------------------------------------------------------------ */
+const HINTS={
+ anonymous:"Anonymous: your name and email are never shown. The owner only sees a random visitor ID tied to this device.",
+ autodelete:"Auto delete: this is removed 24 hours after it's created. It runs from the device that created it, so that device needs to be online with its data uncleared.",
+ visitor:"Visitor: an anonymous ID for one device. Deleting a visitor removes all their messages and replies.",
+ deleteVisitor:"Removes this visitor with all their messages and replies.",
+ msgLimit:`Messages can be ${MSG_MIN} to ${MSG_MAX} characters.`,
+ commentLimit:`Comments can be ${COMMENT_MIN} to ${COMMENT_MAX} characters.`,
+ seePosts:"Shows this profile's posts. The other buttons hide until you hide them.",
+ message:"Send the owner an anonymous message. Only they can reply.",
+ portfolio:"Opens this owner's Premium portfolio page.",
+ share:"Copies this profile's link.",
+ getOwn:"Create your own public profile.",
+ website:"Opens the owner's website in a new tab.",
+ email:"Opens your email app to write to the owner.",
+ phone:"Calls the owner if your device supports calling.",
+ contactNote:"Links, emails and phone numbers in the bio are made tappable.",
+ premium:"Premium: gold profile theme, direct file uploads and a portfolio page.",
+ live:"Your public profile is live and visible to anyone with your link.",
+ like:"Likes are removed 24 hours after they're added, from the device that added them.",
+ postCount:`Posts used out of the ${MAX_POSTS} allowed.`,
+ inboxCount:"Conversations with visitors. Each visitor is one conversation.",
+ upgrade:"Opens Paystack to pay for Premium, which unlocks the gold theme, file uploads and a portfolio page.",
+ adLive:"Your portfolio page is visible to the public.",
+ adScheduled:"Your portfolio is ready and goes live on its start date.",
+ adWaiting:"Request received. We're preparing your portfolio.",
+ adExpired:"This run has ended. You can request another.",
+} as const;
+type HintKey=keyof typeof HINTS;
+
+function useHint(){
+ const toast=useToast();
+ const timer=useRef<number|undefined>(undefined);
+ useEffect(()=>()=>window.clearTimeout(timer.current),[]);
+ const show=React.useCallback((k:HintKey)=>toast("info",HINTS[k],undefined,`hint:${k}`),[toast]);
+ // props(k): mouse hover + keyboard focus. props(k,true): also tap.
+ const props=React.useCallback((k:HintKey,tap=false)=>{
+  const p:Record<string,any>={
+   onPointerEnter:(e:React.PointerEvent)=>{ if(e.pointerType!=="mouse")return; window.clearTimeout(timer.current); timer.current=window.setTimeout(()=>show(k),350); },
+   onPointerLeave:()=>window.clearTimeout(timer.current),
+   onFocus:(e:React.FocusEvent<HTMLElement>)=>{ try{ if(e.currentTarget.matches(":focus-visible"))show(k); }catch{} },
+  };
+  if(tap)p.onClick=()=>show(k);
+  return p;
+ },[show]);
+ return {props,show};
+}
+function Hint({k,children,className,plain}:{k:HintKey;children:React.ReactNode;className?:string;plain?:boolean}){
+ const {props,show}=useHint();
+ return <span role="button" tabIndex={0} className={`spts-hint${plain?"":" spts-hint-word"}${className?" "+className:""}`} {...props(k,true)}
+  onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();show(k);} }}>{children}</span>;
 }
 
 // Minimal context so any descendant can open a dialog without prop drilling.
@@ -212,12 +297,12 @@ function ConfirmHost({children}:{children?:React.ReactNode}){
 // A button that shows a spinner while an async action is in flight and
 // disables itself so it can't be double-clicked.
 function SpinnerButton({
- children,busy,busyLabel,className,type="button",disabled,onClick,title,
+ children,busy,busyLabel,className,type="button",disabled,onClick,title,extra,
 }:{
  children:React.ReactNode;busy:boolean;busyLabel?:string;className?:string;
- type?:"button"|"submit";disabled?:boolean;onClick?:()=>void;title?:string;
+ type?:"button"|"submit";disabled?:boolean;onClick?:()=>void;title?:string;extra?:Record<string,any>;
 }){
- return <button type={type} className={className} disabled={disabled||busy} onClick={onClick} title={title}>
+ return <button type={type} className={className} disabled={disabled||busy} onClick={onClick} title={title} {...extra}>
   {busy&&<span className="spts-spinner" aria-hidden="true"/>}
   {busy?(busyLabel??"Working…"):children}
  </button>;
@@ -298,7 +383,7 @@ function PostMedia({post}:{post:any}){
     onClick={opened?undefined:openVideo}
    />
    {!opened&&<button type="button" className="spts-media-play" onClick={openVideo} aria-label="Play video">
-    <span className="spts-media-play-icon" aria-hidden="true">▶</span>
+    <span className="spts-media-play-icon" aria-hidden="true"><Ico d={ICON.play} filled/></span>
    </button>}
   </>:
    <img
@@ -310,14 +395,14 @@ function PostMedia({post}:{post:any}){
     onClick={()=>setFullscreen(true)}
    />
   }
-  <button type="button" className="spts-media-expand" onClick={()=>setFullscreen(true)} aria-label="View full screen" title="View full screen">⛶</button>
+  <button type="button" className="spts-media-expand" onClick={()=>setFullscreen(true)} aria-label="View full screen" title="View full screen"><Ico d={ICON.expand}/></button>
   {fullscreen&&<MediaLightbox post={post} isVideo={isVideo} onClose={()=>setFullscreen(false)}/>}
  </div>;
 }
 
 /* ------------------------------------------------------------------ *
  * MediaLightbox — distortion-free full-screen viewing (object-fit:
- * contain regardless of orientation), closable via backdrop/✕/Esc.
+ * contain regardless of orientation), closable via backdrop, close button or Esc.
  * ------------------------------------------------------------------ */
 function MediaLightbox({post,isVideo,onClose}:{post:any;isVideo:boolean;onClose:()=>void}){
  useEffect(()=>{
@@ -326,7 +411,7 @@ function MediaLightbox({post,isVideo,onClose}:{post:any;isVideo:boolean;onClose:
   return ()=>document.removeEventListener("keydown",onKey);
  },[onClose]);
  return <div className="spts-lightbox-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-  <button type="button" className="spts-lightbox-close" onClick={onClose} aria-label="Close full screen view">✕</button>
+  <button type="button" className="spts-lightbox-close" onClick={onClose} aria-label="Close full screen view"><Ico d={ICON.close}/></button>
   <div className="spts-lightbox-stage" onClick={e=>e.stopPropagation()}>
    {isVideo
     ?<video className="spts-lightbox-media" src={post.mediaUrl} controls autoPlay playsInline/>
@@ -346,15 +431,48 @@ const LinkText=({text}:{text:string})=><>{text.split(/(https?:\/\/[^\s]+|[A-Z0-9
 })}</>;
 
 /* ------------------------------------------------------------------ *
+ * ClampText: long text shows its first CLAMP_CHARS characters, then "See more" / "See less".
+ * It backs up to a word boundary so a link or number is never cut in half.
+ * ------------------------------------------------------------------ */
+function clampAt(t:string,max:number):number{
+ if(t.length<=max)return t.length;
+ if(!/\s/.test(t[max])&&!/\s/.test(t[max-1])){
+  const start=t.slice(0,max).search(/\S+$/);
+  if(start>=max-150&&start>0)return start;
+ }
+ return max;
+}
+function ClampText({text,plain}:{text:string;plain?:boolean}){
+ const [open,setOpen]=useState(false);
+ const long=text.length>CLAMP_CHARS;
+ const body=long&&!open?text.slice(0,clampAt(text,CLAMP_CHARS)).trimEnd():text;
+ return <>
+  {plain?body:<LinkText text={body}/>}
+  {long&&<>{!open&&"… "}<button type="button" className="spts-clamp-btn" aria-expanded={open} onClick={()=>setOpen(o=>!o)}>{open?"See less":"See more"}</button></>}
+ </>;
+}
+
+// A textarea that grows with its text (up to maxH px), then scrolls.
+function AutoTextarea({maxH=140,...p}:React.TextareaHTMLAttributes<HTMLTextAreaElement>&{maxH?:number}){
+ const ref=useRef<HTMLTextAreaElement>(null);
+ useEffect(()=>{
+  const el=ref.current;if(!el)return;
+  el.style.height="auto";
+  el.style.height=Math.min(el.scrollHeight,maxH)+"px";
+ },[p.value,maxH]);
+ return <textarea ref={ref} rows={1} {...p}/>;
+}
+
+/* ------------------------------------------------------------------ *
  * Auto-delete warnings — shown wherever content is created, so
  * everyone understands the 24h deletion depends on this device.
  * ------------------------------------------------------------------ */
-const TTL_DEVICE_CAVEAT="Auto delete works when you're online.";
+const TTL_DEVICE_CAVEAT="It runs when you're online.";
 function AutoDeleteNotice({text}:{text:string}){
- return <p className="spts-ttl-notice"><span aria-hidden="true">⏳</span> {text} {TTL_DEVICE_CAVEAT}</p>;
+ return <p className="spts-ttl-notice"><Hint k="autodelete">Auto delete</Hint><span>{text} {TTL_DEVICE_CAVEAT}</span></p>;
 }
 function AutoDeleteNoticeSm({text}:{text:string}){
- return <small className="spts-ttl-notice-sm"> {text} Different device or cleared data removes auto delete.</small>;
+ return <small className="spts-ttl-notice-sm"><Hint k="autodelete">Auto delete</Hint> {text} Different device or cleared data stops it.</small>;
 }
 
 /* ------------------------------------------------------------------ *
@@ -495,7 +613,7 @@ function Auth({done}:{done:()=>void}){
  * ------------------------------------------------------------------ */
 function CommentItem({postId,comment,user,deleting,onDelete}:{postId:string;comment:any;user:User|null;deleting:boolean;onDelete:()=>void}){
  const [likeCount,setLikeCount]=useState(0),[liked,setLiked]=useState(false),[busy,setBusy]=useState(false);
- const toast=useToast();
+ const toast=useToast();const hint=useHint();
 
  useEffect(()=>onSnapshot(collection(profileDb,"posts",postId,"comments",comment.id,"likes"),s=>{
   setLikeCount(s.size);
@@ -514,9 +632,9 @@ function CommentItem({postId,comment,user,deleting,onDelete}:{postId:string;comm
  }
 
  return <div className="spts-comment">
-  <p><LinkText text={comment.text}/></p>
+  <p><ClampText text={comment.text}/></p>
   <div className="spts-comment-actions">
-   <SpinnerButton busy={busy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike} title="Likes auto-delete after 24h on this device">{liked?"♥":"♡"} {likeCount}</SpinnerButton>
+   <SpinnerButton busy={busy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike} extra={{...hint.props("like"),"aria-label":liked?"Unlike":"Like"}}><Ico d={ICON.heart} filled={liked}/> {likeCount}</SpinnerButton>
    {user&&user.uid===comment.ownerId&&<SpinnerButton className="spts-ghost" busy={deleting} busyLabel="…" onClick={onDelete}>Delete</SpinnerButton>}
   </div>
  </div>;
@@ -530,7 +648,7 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
  const [likeBusy,setLikeBusy]=useState(false),[commentBusy,setCommentBusy]=useState(false),[deleteBusy,setDeleteBusy]=useState(false);
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
  const [commentsOpen,setCommentsOpen]=useState(false);
- const confirm=useConfirm();const toast=useToast();
+ const confirm=useConfirm();const toast=useToast();const hint=useHint();
 
  useEffect(()=>{
   const unsubLikes=onSnapshot(collection(profileDb,"posts",post.id,"likes"),s=>{
@@ -561,7 +679,8 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
   e.preventDefault();
   if(!user)return setErr("Log in to comment.");
   const text=commentText.trim();
-  if(!text)return;
+  if(text.length<COMMENT_MIN)return;
+  if(text.length>COMMENT_MAX){setErr(`Comments must be ${COMMENT_MIN}-${COMMENT_MAX} characters.`);return;}
   setErr("");setCommentBusy(true);
   try{ const ref=await addDoc(collection(profileDb,"posts",post.id,"comments"),{ownerId:user.uid,text,createdAt:serverTimestamp()}); scheduleAutoDelete({kind:"comment",postId:post.id,commentId:ref.id}); setCommentText(""); toast("success","Comment added — it auto-deletes in 24h on this device."); }
   catch(x:any){setErr(fail(toast,x,"Unable to post comment"));}
@@ -597,10 +716,10 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
 
  return <article className="spts-post">
   <PostMedia post={post}/>
-  <p><LinkText text={post.caption}/></p>
+  <p><ClampText text={post.caption}/></p>
   <div className="spts-post-actions">
-   <SpinnerButton busy={likeBusy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike} title="Likes auto-delete after 24h on this device">
-    {liked?"♥":"♡"} {likeCount}
+   <SpinnerButton busy={likeBusy} busyLabel="…" className={liked?"spts-liked":""} onClick={toggleLike} extra={{...hint.props("like"),"aria-label":liked?"Unlike":"Like"}}>
+    <Ico d={ICON.heart} filled={liked}/> {likeCount}
    </SpinnerButton>
    <button type="button" aria-expanded={commentsOpen} onClick={()=>setCommentsOpen(o=>!o)}>{commentsOpen?"Hide comments":"Comments"}</button>
    {canDeletePost&&<SpinnerButton className="spts-ghost" busy={deleteBusy} busyLabel="Deleting…" onClick={handleDeletePost}>Delete post</SpinnerButton>}
@@ -609,10 +728,12 @@ function PostCard({post,user,canDeletePost,onDeletePost}:{post:any;user:User|nul
    {comments.length===0&&<p className="spts-muted">No comments yet.</p>}
    {comments.map(c=><CommentItem key={c.id} postId={post.id} comment={c} user={user} deleting={pendingDeleteId===c.id} onDelete={()=>deleteComment(c.id)}/>)}
    <form onSubmit={addComment}>
-    <input maxLength={300} placeholder={user?"Add a comment":"Log in to comment"} value={commentText} onChange={e=>setCommentText(e.target.value)} disabled={!user||commentBusy}/>
+    <AutoTextarea maxH={120} maxLength={COMMENT_MAX} placeholder={user?"Add a comment":"Log in to comment"} value={commentText} onChange={e=>setCommentText(e.target.value)}
+     onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit();}}} disabled={!user||commentBusy}/>
     <SpinnerButton type="submit" busy={commentBusy} busyLabel="Posting…" disabled={!user||!commentText.trim()}>Comment</SpinnerButton>
    </form>
-   {user&&<AutoDeleteNoticeSm text="Comments auto-delete after 24h."/>}
+   {user&&<div className="spts-field-foot"><Hint k="commentLimit">{COMMENT_MIN}-{COMMENT_MAX} characters</Hint><span>{commentText.length}/{COMMENT_MAX}</span></div>}
+   {user&&<AutoDeleteNoticeSm text="Comments are removed after 24h."/>}
   </div>}
   {err&&<p className="spts-error"><ErrText text={err}/></p>}
  </article>;
@@ -656,7 +777,7 @@ function ReplyThread({
   e.preventDefault();
   if(!canReply)return;
   const t=text.trim();
-  if(!validMessage(t)){setErr(`Reply must be ${MIN_REPLY}-${MAX_REPLY} characters.`);return;}
+  if(t.length<MSG_MIN||t.length>MSG_MAX){setErr(`Reply must be ${MSG_MIN}-${MSG_MAX} characters.`);return;}
   if(replies.length>=MAX_REPLIES_PER_MESSAGE){setErr("Reply limit reached for this message.");return;}
   setSending(true);setErr("");
   try{
@@ -695,20 +816,22 @@ function ReplyThread({
   {replies.length===0&&<p className="spts-muted">No replies.</p>}
   {replies.map(r=><div className={`spts-reply spts-reply-${r.role}`} key={r.id}>
    <span className="spts-reply-role">{r.role==="owner"?"Owner":"Visitor"}</span>
-   <p><LinkText text={decrypted[r.id]??"…"}/></p>
+   <p><ClampText text={decrypted[r.id]??"…"}/></p>
    <SpinnerButton className="spts-ghost" busy={pendingDeleteId===r.id} busyLabel="Deleting…" onClick={()=>deleteReply(r.id)}>Delete</SpinnerButton>
   </div>)}
   {canReply&&<form className="spts-reply-form" onSubmit={sendReply}>
-   <input
-    maxLength={MAX_REPLY}
+   <AutoTextarea
+    maxH={120}
+    maxLength={MSG_MAX}
     placeholder="Reply…"
     value={text}
     onChange={e=>setText(e.target.value)}
+    onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit();}}}
     disabled={sending}
    />
    <SpinnerButton type="submit" busy={sending} busyLabel="Sending…" disabled={!text.trim()}>Reply</SpinnerButton>
   </form>}
-  {canReply&&<AutoDeleteNoticeSm text="Replies auto-delete after 24h."/>}
+  {canReply&&<AutoDeleteNoticeSm text="Replies are removed after 24h."/>}
   {err&&<p className="spts-error"><ErrText text={err}/></p>}
  </div>;
 }
@@ -722,7 +845,7 @@ function ConversationThread({conversationId,visitorId,viewerRole="owner",preview
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
  const [showAllMessages,setShowAllMessages]=useState(!previewCount);
  const [deletingVisitor,setDeletingVisitor]=useState(false);
- const confirm=useConfirm();const toast=useToast();
+ const confirm=useConfirm();const toast=useToast();const hint=useHint();
 
  useEffect(()=>{
   const q=query(collection(profileDb,"conversations",conversationId,"messages"),orderBy("createdAt","asc"),limit(MAX_MESSAGES*2));
@@ -767,15 +890,15 @@ setMessages(docs);setLoading(false);
  const hiddenCount=messages.length-shownMessages.length;
  return <div className="spts-conversation">
   <div className="spts-conversation-head">
-   <span>Visitor {visitorId.slice(0,8)}</span>
-   {viewerRole==="owner"&&<SpinnerButton className="spts-ghost" busy={deletingVisitor} busyLabel="Deleting…" onClick={deleteVisitor}>Delete visitor</SpinnerButton>}
+   <span><Hint k="visitor">Visitor</Hint> {visitorId.slice(0,8)}</span>
+   {viewerRole==="owner"&&<SpinnerButton className="spts-ghost" busy={deletingVisitor} busyLabel="Deleting…" onClick={deleteVisitor} extra={hint.props("deleteVisitor")}>Delete visitor</SpinnerButton>}
   </div>
   {loading&&<p className="spts-muted">Loading…</p>}
   {err&&<p className="spts-error"><ErrText text={err}/></p>}
   {!loading&&messages.length===0&&<p className="spts-muted">No messages in this conversation.</p>}
   {previewCount&&hiddenCount>0&&<button type="button" className="spts-see-more" onClick={()=>setShowAllMessages(true)}>See {hiddenCount} earlier message{hiddenCount===1?"":"s"}</button>}
   {shownMessages.map(m=><div className="spts-message" key={m.id}>
-   <p><LinkText text={decrypted[m.id]??"…"}/></p>
+   <p><ClampText text={decrypted[m.id]??"…"}/></p>
    <div className="spts-message-actions">
     <SpinnerButton className="spts-ghost" busy={pendingDeleteId===m.id} busyLabel="Deleting…" onClick={()=>deleteMessage(m.id)}>Delete</SpinnerButton>
     <button className="spts-ghost" onClick={()=>setOpenReplies(s=>({...s,[m.id]:!s[m.id]}))}>
@@ -819,14 +942,14 @@ function ChatExchange({conversationId,message,text,deleting,onDelete,onUpdate}:{
 
  return <div className="spts-chat-exchange">
   <div className="spts-chat-row spts-chat-me">
-   <div className="spts-chat-bubble"><LinkText text={text??"…"}/></div>
+   <div className="spts-chat-bubble"><ClampText text={text??"…"}/></div>
    <div className="spts-chat-meta">
     <span>{fmtTime(message.createdAt)}</span>
     <button type="button" className="spts-chat-del" disabled={deleting} onClick={onDelete}>{deleting?"Deleting…":"Delete"}</button>
    </div>
   </div>
   {replies.map(r=><div key={r.id} className={`spts-chat-row ${r.role==="owner"?"spts-chat-them":"spts-chat-me"}`}>
-   <div className="spts-chat-bubble"><LinkText text={dec[r.id]??"…"}/></div>
+   <div className="spts-chat-bubble"><ClampText text={dec[r.id]??"…"}/></div>
    <div className="spts-chat-meta"><span>{fmtTime(r.createdAt)}</span></div>
   </div>)}
  </div>;
@@ -888,8 +1011,8 @@ function Messages({user}:{user:User}){
   return onSnapshot(q,s=>{setConversations(s.docs.map(d=>({id:d.id,...d.data()} as any)));setLoading(false)},e=>{setErr(accessText(e,ACCESS_GENERIC));setLoading(false)});
  },[user.uid]);
  return <section className="spts-card">
-  <div className="spts-card-head"><h2>Inbox</h2><span className="spts-badge">{conversations.length}</span></div>
-  <AutoDeleteNotice text="Messages and replies auto-delete 24h after they're sent."/>
+  <div className="spts-card-head"><h2>Inbox</h2><Hint k="inboxCount" plain className="spts-badge">{conversations.length}</Hint></div>
+  <AutoDeleteNotice text="Messages and replies are removed 24h after they're sent."/>
   {loading&&<p className="spts-muted">Loading messages…</p>}
   {err&&<p className="spts-error">Couldn't load messages: <ErrText text={err}/></p>}
   {!loading&&!err&&conversations.length===0&&<p className="spts-muted">No messages yet. Anyone who visits your public profile can send you one.</p>}
@@ -1007,7 +1130,7 @@ function Dashboard({user}:{user:User}){
    body:<>
     <p className="spts-muted">This removes your public profile page and the link between your account and that username.</p>
     <ul className="spts-modal-list">
-     <li><b>Removed:</b> your public profile document and the username ↔ account link.</li>
+     <li><b>Removed:</b> your public profile document and the link between your username and account.</li>
      <li><b>Not removed:</b> your posts, likes, comments, and inbox messages. Delete those separately from their own controls if you want them gone.</li>
     </ul>
     <p className="spts-muted">You can create a new profile at any time by visiting the dashboard again.</p>
@@ -1040,8 +1163,8 @@ function Dashboard({user}:{user:User}){
   <div className="spts-card-head">
    <h2>Profile</h2>
    <div className="spts-card-head-badges">
-    {!editing&&profile&&<span className="spts-badge">Live</span>}
-    {isPremium&&<span className="spts-premium-tag">✦ Premium</span>}
+    {!editing&&profile&&<Hint k="live" plain className="spts-badge">Live</Hint>}
+    {isPremium&&<Hint k="premium" plain className="spts-premium-tag">Premium</Hint>}
     {!isPremium&&profile&&<UpgradeButton user={user}/>}
    </div>
   </div>
@@ -1051,7 +1174,7 @@ function Dashboard({user}:{user:User}){
    {profile.photoUrl&&<img className="spts-avatar-sm" src={profile.photoUrl} alt=""/>}
    <div>
     <p className="spts-name">{profile.displayName} <span className="spts-muted">@{profile.username}</span></p>
-    {profile.bio&&<p className="spts-muted">{profile.bio}</p>}
+    {profile.bio&&<p className="spts-muted"><ClampText text={profile.bio} plain/></p>}
    </div>
    <div className="spts-profile-summary-actions">
     <a href={`/profile/${profile.username}`}>View public profile</a>
@@ -1087,12 +1210,12 @@ function Dashboard({user}:{user:User}){
  {profile&&<AdRequest user={user} profile={profile}/>}
 
  <section className="spts-card">
-  <div className="spts-card-head"><h2>Posts</h2><span className="spts-badge">{posts.length}/{MAX_POSTS}</span></div>
+  <div className="spts-card-head"><h2>Posts</h2><Hint k="postCount" plain className="spts-badge">{posts.length}/{MAX_POSTS}</Hint></div>
   <p className="spts-muted">{isPremium?"Paste a URL, or upload a file directly.":"URLs only — no uploads. Upgrade to Premium to upload files directly."}</p>
-  <AutoDeleteNotice text="Posts (and their likes and comments) auto-delete 24h after you add them."/>
+  <AutoDeleteNotice text="Posts, with their likes and comments, are removed 24h after you add them."/>
   <form onSubmit={add}>
    <label>Photo/video URL<input required={!isPremium} placeholder="https://…" value={url} onChange={e=>setUrl(e.target.value)} disabled={addingPost||!!file}/></label>
-   {isPremium&&<label className="spts-fileupload-row">Or upload a file <span className="spts-premium-tag spts-premium-tag-sm">✦ Premium</span>
+   {isPremium&&<label className="spts-fileupload-row">Or upload a file <span className="spts-premium-tag spts-premium-tag-sm">Premium</span>
     <input type="file" accept="image/*,video/*" onChange={e=>setFile(e.target.files?.[0]||null)} disabled={addingPost}/>
    </label>}
    <label>Caption<input maxLength={500} placeholder="Optional caption" value={caption} onChange={e=>setCaption(e.target.value)} disabled={addingPost}/></label>
@@ -1102,7 +1225,7 @@ function Dashboard({user}:{user:User}){
   {posts.length>0&&<>
    <PostCard key={posts[0].id} post={posts[0]} user={user} canDeletePost={false} onDeletePost={()=>deletePost(posts[0].id)}/>
    <p className="spts-muted spts-dashboard-post-hint">Showing your latest post. Manage or delete posts from your public profile, which you own.</p>
-   {profile&&<a className="spts-see-more" href={`/profile/${profile.username}`}>See all posts on your public profile →</a>}
+   {profile&&<a className="spts-see-more" href={`/profile/${profile.username}`}>See all posts on your public profile <Ico d={ICON.next}/></a>}
   </>}
  </section>
 
@@ -1120,7 +1243,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  const [showAllPosts,setShowAllPosts]=useState(false);
  const [copied,setCopied]=useState(false);
  const [postsOpen,setPostsOpen]=useState(false),[msgOpen,setMsgOpen]=useState(false);
- const confirm=useConfirm();const toast=useToast();
+ const confirm=useConfirm();const toast=useToast();const hint=useHint();
 
  useEffect(()=>{(async()=>{try{
   const s=await getDoc(doc(profileDb,"profiles",normalizeUsername(username)));
@@ -1134,7 +1257,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  async function send(){
   setErr("");
   if(!p)return;
-  if(!validMessage(msg))return setErr(`Use ${MIN_MESSAGE}–${MAX_MESSAGE} characters.`);
+  if(msg.trim().length<MSG_MIN||msg.trim().length>MSG_MAX)return setErr(`Use ${MSG_MIN}–${MSG_MAX} characters.`);
   if(count>=MAX_MESSAGES)return setErr("Conversation limit reached.");
   setSending(true);
   try{
@@ -1181,23 +1304,24 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   {p.photoUrl?<img className="spts-avatar-lg" src={p.photoUrl} alt={p.displayName}/>:<div className="spts-avatar-lg spts-avatar-fallback" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
   <h1 className="spts-profile-name">{p.displayName}</h1>
   <p className="spts-profile-handle">@{p.username}</p>
-  {p.premium&&<span className="spts-premium-badge">✦ Premium</span>}
-  {p.bio&&<p className="spts-bio spts-profile-bio"><LinkText text={p.bio}/></p>}
+  {p.premium&&<Hint k="premium" plain className="spts-premium-badge">Premium</Hint>}
+  {p.bio&&<p className="spts-bio spts-profile-bio"><ClampText text={p.bio}/></p>}
   {(p.websiteUrl||p.email||p.phone)&&<div className="spts-profile-meta">
-   {p.websiteUrl&&<a className="spts-meta-chip" href={p.websiteUrl} target="_blank" rel="noreferrer">Website</a>}
-   {p.email&&<a className="spts-meta-chip" href={`mailto:${p.email}`}>Email</a>}
-   {p.phone&&<a className="spts-meta-chip" href={`tel:${p.phone}`}>Phone</a>}
+   {p.websiteUrl&&<a className="spts-meta-chip" href={p.websiteUrl} target="_blank" rel="noreferrer" {...hint.props("website")}>Website</a>}
+   {p.email&&<a className="spts-meta-chip" href={`mailto:${p.email}`} {...hint.props("email")}>Email</a>}
+   {p.phone&&<a className="spts-meta-chip" href={`tel:${p.phone}`} {...hint.props("phone")}>Phone</a>}
   </div>}
+  {/* One panel at a time: while posts or the message box are open, every other button hides until it is closed. */}
   <div className="spts-profile-hero-actions">
-   <button type="button" aria-expanded={postsOpen} onClick={()=>setPostsOpen(o=>!o)}>{postsOpen?"Hide posts":"See posts"}</button>
-   <button type="button" aria-expanded={msgOpen} onClick={()=>setMsgOpen(o=>!o)}>{msgOpen?"Close":"Message"}</button>
-   <a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`}>See portfolio</a>
+   {!msgOpen&&<button type="button" aria-expanded={postsOpen} onClick={()=>setPostsOpen(o=>!o)} {...hint.props("seePosts")}>{postsOpen?"Hide posts":"See posts"}</button>}
+   {!postsOpen&&<button type="button" aria-expanded={msgOpen} onClick={()=>setMsgOpen(o=>!o)} {...hint.props("message")}>{msgOpen?"Hide message":"Message"}</button>}
+   {!postsOpen&&!msgOpen&&<a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`} {...hint.props("portfolio")}>See portfolio</a>}
   </div>
-  <div className="spts-profile-hero-actions spts-hero-actions-2">
-   <button type="button" className="spts-ghost" onClick={shareProfile}>{copied?"✓ Link copied":"Share profile"}</button>
-   <a className="spts-ghost spts-link-btn" href="/profiles">Get your own profile</a>
-  </div>
-  <small className="spts-muted spts-contact-note">{contacts.urls.length+contacts.emails.length+contacts.phones.length} contact/link items detected in bio</small>
+  {!postsOpen&&!msgOpen&&<div className="spts-profile-hero-actions spts-hero-actions-2">
+   <button type="button" className="spts-ghost" onClick={shareProfile} {...hint.props("share")}>{copied?<><Ico d={ICON.check}/> Link copied</>:"Share profile"}</button>
+   <a className="spts-ghost spts-link-btn" href="/profiles" {...hint.props("getOwn")}>Get your own profile</a>
+  </div>}
+  <small className="spts-muted spts-contact-note"><Hint k="contactNote">{contacts.urls.length+contacts.emails.length+contacts.phones.length} contact/link items detected in bio</Hint></small>
   {postsOpen&&<div className="spts-hero-panel">
    <section className="spts-card spts-section">
     <div className="spts-card-head"><h2>Posts</h2><span className="spts-badge">{posts.length}</span></div>
@@ -1213,18 +1337,18 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    <section className="spts-card spts-section spts-chat">
     <div className="spts-chat-head">
      {p.photoUrl?<img className="spts-chat-avatar" src={p.photoUrl} alt=""/>:<div className="spts-chat-avatar" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
-     <div><strong>{p.displayName}</strong><small>Anonymous · auto-deletes in 24h</small></div>
+     <div><strong>{p.displayName}</strong><small><Hint k="anonymous">Anonymous</Hint> · <Hint k="autodelete">auto-deletes in 24h</Hint></small></div>
     </div>
 
     <VisitorChat conversationId={`${p.uid}_${getDeviceId()}`}/>
 
     <div className="spts-chat-compose">
-     <textarea rows={1} maxLength={MAX_MESSAGE} value={msg} onChange={e=>setMsg(e.target.value)}
+     <AutoTextarea maxLength={MSG_MAX} value={msg} onChange={e=>setMsg(e.target.value)}
       onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();if(msg.trim()&&!sending)send();}}}
       placeholder="Message…" disabled={sending}/>
-     <SpinnerButton className="spts-chat-send" busy={sending} busyLabel="" onClick={send} disabled={!msg.trim()} title="Send">➤</SpinnerButton>
+     <SpinnerButton className="spts-chat-send" busy={sending} busyLabel="" onClick={send} disabled={!msg.trim()} title="Send"><Ico d={ICON.send}/></SpinnerButton>
     </div>
-    <div className="spts-chat-foot"><span>{MIN_MESSAGE}–{MAX_MESSAGE} chars</span><span>{msg.length}/{MAX_MESSAGE}</span></div>
+    <div className="spts-chat-foot"><Hint k="msgLimit">{MSG_MIN}–{MSG_MAX} characters</Hint><span>{msg.length}/{MSG_MAX}</span></div>
     {err&&<div className="spts-error-box" role="alert"><span className="spts-error-icon" aria-hidden="true">!</span><span><ErrText text={err}/></span></div>}
    </section>
   </div>}
@@ -1286,7 +1410,7 @@ async function beginUpgrade(user:User){
 // Every upgrade button in the app.
 function UpgradeButton({user,className}:{user:User;className?:string}){
  const [busy,setBusy]=useState(false),[flagged,setFlagged]=useState(false);
- const toast=useToast();
+ const toast=useToast();const hint=useHint();
  async function go(){
   setBusy(true);
   try{ await beginUpgrade(user); } // navigates away on success
@@ -1297,7 +1421,7 @@ function UpgradeButton({user,className}:{user:User;className?:string}){
   }
  }
  return <>
-  <SpinnerButton className={`spts-upgrade-btn${className?" "+className:""}`} busy={busy} busyLabel="Please wait…" onClick={go}>Upgrade to Premium</SpinnerButton>
+  <SpinnerButton className={`spts-upgrade-btn${className?" "+className:""}`} busy={busy} busyLabel="Please wait…" onClick={go} extra={hint.props("upgrade")}>Upgrade to Premium</SpinnerButton>
   {flagged&&<div className="spts-modal-backdrop" role="dialog" aria-modal="true" onClick={()=>setFlagged(false)}>
    <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
     <h3 className="spts-modal-title">Account restricted</h3>
@@ -1360,7 +1484,7 @@ function UpgradeSuccess({user}:{user:User|null}){
  return <main className="spts-page"><section className="spts-card spts-upgrade-confirm">
   {status==="working"&&<><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Confirming your payment…</p></>}
   {status==="done"&&<>
-   <h2>You're Premium <span aria-hidden="true">✦</span></h2>
+   <h2>You're Premium</h2>
    <p className="spts-muted">Your premium public-profile theme, direct file uploads and portfolio are unlocked.</p>
    <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
   </>}
@@ -1601,7 +1725,7 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
 /* Dashboard card. Portfolio is Premium-only: everyone else sees an upgrade prompt. */
 function AdRequest({user,profile}:{user:User;profile:any}){
  if(!profile.premium)return <section className="spts-card">
-  <div className="spts-card-head"><h2>Portfolio</h2><span className="spts-premium-tag spts-premium-tag-sm">✦ Premium</span></div>
+  <div className="spts-card-head"><h2>Portfolio</h2><span className="spts-premium-tag spts-premium-tag-sm">Premium</span></div>
   <p className="spts-muted">Portfolio is for Premium users.</p>
   <div className="spts-ad-actions">
    <UpgradeButton user={user}/>
@@ -1610,6 +1734,7 @@ function AdRequest({user,profile}:{user:User;profile:any}){
  return <AdRequestCard user={user} profile={profile}/>;
 }
 
+const BADGE_HINT:Record<string,HintKey>={live:"adLive",scheduled:"adScheduled",waiting:"adWaiting",expired:"adExpired"};
 // One button, plus the portfolio's current state.
 function AdRequestCard({user,profile}:{user:User;profile:any}){
  const [open,setOpen]=useState(false),[bump,setBump]=useState(0);
@@ -1620,7 +1745,7 @@ function AdRequestCard({user,profile}:{user:User;profile:any}){
  const range=(s?:string,e?:string)=>s&&e?`${prettyDate(s)} – ${prettyDate(e)}`:e?`until ${prettyDate(e)}`:s?`from ${prettyDate(s)}`:"";
 
  return <section className="spts-card">
-  <div className="spts-card-head"><h2>Portfolio</h2>{badge&&<span className="spts-badge">{badge}</span>}</div>
+  <div className="spts-card-head"><h2>Portfolio</h2>{badge&&phase&&BADGE_HINT[phase]?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
   <p className="spts-muted">
    {phase==="live"&&<>Your portfolio is live{status?.endDate?` until ${prettyDate(status.endDate)}`:""}. You can request again once it expires.</>}
    {phase==="scheduled"&&<>Your portfolio is ready and goes live {status?.startDate?`on ${prettyDate(status.startDate)}`:"soon"}.</>}
@@ -1697,8 +1822,8 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
 
  return <main className="spts-ad">
   <header className="spts-ad-bar">
-   <a className="spts-ghost spts-link-btn" href={`/profile/${uname}`}>← @{uname}</a>
-   <button type="button" className="spts-ghost" onClick={copyLink}>{copied?"✓ Copied":"Copy link"}</button>
+   <a className="spts-ghost spts-link-btn" href={`/profile/${uname}`}><Ico d={ICON.back}/> @{uname}</a>
+   <button type="button" className="spts-ghost" onClick={copyLink}>{copied?<><Ico d={ICON.check}/> Copied</>:"Copy link"}</button>
   </header>
   {live&&<iframe
    className="spts-ad-frame"
