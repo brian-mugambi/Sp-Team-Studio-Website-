@@ -1329,3 +1329,120 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
     flex: 1;
   }
 }
+
+
+/* ================================================================
+   PUBLIC PROFILE CHAT — ALIGNMENT UPGRADE
+   Presentation-only override. Keeps existing chat logic/markup.
+   ================================================================ */
+
+.spts-public .spts-chat {
+  width: 100%;
+  max-width: 820px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.spts-public .spts-chat-head {
+  min-height: 60px;
+  align-items: center;
+}
+
+.spts-public .spts-chat-thread {
+  width: 100%;
+  box-sizing: border-box;
+  scrollbar-gutter: stable;
+}
+
+.spts-public .spts-chat-compose {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 16px;
+  box-sizing: border-box;
+}
+
+.spts-public .spts-chat-compose textarea {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  max-height: 140px;
+  margin: 0;
+  box-sizing: border-box;
+  resize: none;
+  display: block;
+  line-height: 22px;
+}
+
+.spts-public .spts-chat-send {
+  width: 46px;
+  height: 44px;
+  min-width: 46px;
+  min-height: 44px !important;
+  margin: 0;
+  padding: 0 !important;
+  box-sizing: border-box;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spts-public .spts-chat-foot {
+  width: 100%;
+  min-height: 18px;
+  margin-top: 7px;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.spts-public .spts-chat-row {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.spts-public .spts-chat-bubble {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.spts-public .spts-chat-meta {
+  line-height: 1.35;
+}
+
+.spts-public .spts-chat-compose textarea:focus {
+  outline: none;
+}
+
+@media (max-width: 520px) {
+  .spts-public .spts-chat-compose {
+    grid-template-columns: minmax(0, 1fr) 42px;
+    gap: 8px;
+  }
+
+  .spts-public .spts-chat-send {
+    width: 42px;
+    min-width: 42px;
+  }
+
+  .spts-public .spts-chat-compose textarea {
+    height: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Override the earlier mobile column rule so the composer stays inline. */
+@media (max-width: 760px) {
+  .spts-public .spts-chat-compose {
+    flex-direction: initial;
+  }
+
+  .spts-public .spts-chat-send {
+    width: auto;
+    flex-basis: auto;
+  }
+}
