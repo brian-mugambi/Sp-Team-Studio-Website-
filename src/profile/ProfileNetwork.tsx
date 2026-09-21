@@ -27,6 +27,8 @@ const PAYSTACK_UPGRADE_URL="https://paystack.shop/pay/bv5n43khmv";
 const MSG_MIN=1,MSG_MAX=2500;
 const COMMENT_MIN=1,COMMENT_MAX=1000;
 const CLAMP_CHARS=500;
+// Where the owner lands from "Help?" on their public profile (change if your dashboard lives elsewhere).
+const DASHBOARD_TOUR_URL="/?tour=1";
 
 /* Support on WhatsApp — the number is never shown; users only see "Contact support".
  * wa.me needs the number in international format, so set SUPPORT_COUNTRY_CODE
@@ -1063,6 +1065,110 @@ function Messages({user}:{user:User}){
 }
 
 /* ------------------------------------------------------------------ *
+ * Help: the dashboard tour, and the "Help?" popup on public profiles.
+ * ------------------------------------------------------------------ */
+type TourStep={title:string;body:React.ReactNode;action?:{label:string;run?:()=>void;href?:string;external?:boolean}};
+
+// Step-by-step tour. Skip closes it at any time; reopen from "Help?" on the dashboard.
+function Tour({steps,onClose}:{steps:TourStep[];onClose:()=>void}){
+ const [i,setI]=useState(0);
+ const step=steps[i],last=i===steps.length-1;
+ useEffect(()=>{
+  const onKey=(e:KeyboardEvent)=>{ if(e.key==="Escape")onClose(); };
+  window.addEventListener("keydown",onKey);
+  return ()=>window.removeEventListener("keydown",onKey);
+ },[onClose]);
+ const act=step.action;
+ return <div className="spts-modal-backdrop" role="dialog" aria-modal="true" aria-label="Dashboard tour">
+  <div className="spts-modal spts-modal-wide spts-tour">
+   <div className="spts-tour-top">
+    <span className="spts-tour-count">Step {i+1} of {steps.length}</span>
+    <button type="button" className="spts-ghost spts-tour-close" aria-label="Skip tour" title="Skip tour" onClick={onClose}><Ico d={ICON.close}/></button>
+   </div>
+   <h3 className="spts-modal-title">{step.title}</h3>
+   <div className="spts-modal-body">{step.body}</div>
+   {act&&(act.href
+    ?<a className="spts-ghost spts-link-btn spts-tour-action" href={act.href} {...(act.external?{target:"_blank",rel:"noreferrer"}:{})}>{act.label}</a>
+    :<button type="button" className="spts-ghost spts-tour-action" onClick={()=>{onClose();act.run?.();}}>{act.label}</button>)}
+   <div className="spts-tour-dots" aria-hidden="true">{steps.map((_,k)=><span key={k} className={k===i?"on":""}/>)}</div>
+   <div className="spts-modal-actions">
+    <button type="button" className="spts-ghost" onClick={()=>setI(n=>n-1)} disabled={i===0}>Back</button>
+    {last
+     ?<button type="button" autoFocus onClick={onClose}>Done</button>
+     :<button type="button" autoFocus onClick={()=>setI(n=>n+1)}>Next</button>}
+   </div>
+  </div>
+ </div>;
+}
+
+// What a new owner is usually unaware of, in the order they meet it. Wording follows the dashboard as it is.
+function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>void;showInbox:()=>void}):TourStep[]{
+ const {profile,premium}=o;
+ const steps:TourStep[]=[
+  {title:"Welcome to your dashboard",body:<p>A quick tour of where everything is. Skip any time, and reopen it with <b>Help?</b> at the top of this page.</p>},
+  profile
+   ?{title:"Edit your profile",body:<p>Tap <b>Manage profile</b>, then <b>Edit</b>. After setup you can change your bio and fill any optional field you left empty. Your username, display name and filled fields are locked; use contact support to change those.</p>,action:{label:"Show me",run:o.showProfile}}
+   :{title:"Create your profile",body:<p>Fill in a username and display name, then tap <b>Create profile</b>. Your username becomes your public link and can't be changed later.</p>,action:{label:"Show me",run:o.showProfile}},
+ ];
+ if(profile)steps.push({
+  title:"See your public profile",
+  body:<p>Under <b>Manage profile</b>, tap <b>View public profile</b> to see the page visitors get at <b>/profile/{profile.username}</b>. There, <b>Share profile</b> copies your link.</p>,
+  action:{label:"Open my public profile",href:`/profile/${profile.username}`},
+ });
+ steps.push(
+  {title:"Add posts",body:<p>Posts appear on your public profile. Paste a photo or video link{premium?", or upload a file":" (Premium members can upload files)"}, add an optional caption, then tap <b>Add post</b>. You can keep up to {MAX_POSTS}. Manage or delete posts from your public profile.</p>},
+  {title:"Your inbox",body:<p>Tap <b>Go to inbox</b> to read messages from visitors. They're anonymous: you see a visitor ID, not a name. Reply in the thread, or use <b>Delete visitor</b> to remove someone with all their messages.</p>,action:{label:"Show me",run:o.showInbox}},
+  {title:"Portfolio",body:premium
+   ?<p>Upload your own HTML file (under 0.5 MB) in the <b>Portfolio</b> card and pick a duration of at least 1 week. While it's live it can't be removed. Visitors reach it from <b>See portfolio</b> on your profile.</p>
+   :<p>In the <b>Portfolio</b> card, tap <b>Request portfolio</b>, say what it should show, and pick a duration and start date. We build it and it goes live for that time. Visitors reach it from <b>See portfolio</b> on your profile.</p>},
+  {title:premium?"Your Premium features":"What Premium adds",body:premium
+   ?<p>You have the gold theme on your public profile, direct photo and video uploads for posts, and your own portfolio upload.</p>
+   :<p>Premium gives you a gold theme on your public profile, direct photo and video uploads for posts, and uploading your own portfolio instead of requesting one. Find <b>Upgrade to Premium</b> in the Profile card.</p>,
+   ...(premium?{}:{action:{label:"Show me",run:o.showProfile}})},
+  {title:"Auto delete",body:<p>Posts, comments, likes, messages and replies are removed 24 hours after they're created. It runs from the device that created them, so that device needs to be online with its browser data kept. Tap or hover any dotted word for a quick explanation.</p>},
+  {title:"Need a hand?",body:<p>Tap <b>Help?</b> any time to reopen this tour. For anything else, contact support.</p>,action:{label:"Contact support",href:supportUrl("Hi, I need help with my profile."),external:true}},
+ );
+ return steps;
+}
+
+// "Help?" on a public profile, for everyone except the owner (who is sent to the dashboard tour instead).
+function ProfileHelp({p,user,posts,onClose}:{p:any;user:User|null;posts:number;onClose:()=>void}){
+ const {loading,profile}=useOwnProfile(user);
+ useEffect(()=>{
+  const onKey=(e:KeyboardEvent)=>{ if(e.key==="Escape")onClose(); };
+  window.addEventListener("keydown",onKey);
+  return ()=>window.removeEventListener("keydown",onKey);
+ },[onClose]);
+ const ad=readAdCache(p.username);
+ const portfolioLive=!!ad&&adPhase(ad,todayLocal())==="live";
+ const hasContact=!!(p.websiteUrl||p.email||p.phone);
+ return <div className="spts-modal-backdrop" role="dialog" aria-modal="true" aria-label={`About @${p.username}`} onClick={onClose}>
+  <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
+   <h3 className="spts-modal-title">About @{p.username}</h3>
+   <div className="spts-modal-body">
+    <p>{p.displayName}'s public profile puts their work, contact details and an anonymous inbox behind one link. Here's what you can do:</p>
+    <ul className="spts-modal-list">
+     {posts>0&&<li><b>See posts</b> to browse their latest work. Signed-in visitors can like and comment.</li>}
+     <li><b>Message</b> to write to them anonymously. Your name isn't shown, and their reply appears in the same chat.</li>
+     {hasContact&&<li><b>Website</b>, <b>Email</b> or <b>Phone</b> to reach them directly.</li>}
+     {portfolioLive&&<li><b>See portfolio</b> to view their portfolio page.</li>}
+     <li><b>Share profile</b> to copy this link.</li>
+    </ul>
+    {!user&&<p>Log in to like and comment on posts. Messaging works without an account.</p>}
+    {user&&!loading&&profile&&<p>You're signed in, and your own profile works the same way.</p>}
+    {user&&!loading&&!profile&&<p>You're signed in but don't have a profile yet. Create one to get a page like this.</p>}
+   </div>
+   <div className="spts-modal-actions">
+    {!user&&<a className="spts-ghost spts-link-btn" href="/profiles">Log in or create a profile</a>}
+    {user&&!loading&&profile&&<a className="spts-ghost spts-link-btn" href="/">Go to my dashboard</a>}
+    {user&&!loading&&!profile&&<a className="spts-ghost spts-link-btn" href="/">Create my profile</a>}
+    <button type="button" onClick={onClose}>Close</button>
+   </div>
+  </div>
+ </div>;
+}
+
+/* ------------------------------------------------------------------ *
  * Dashboard — profile edit + delete reworked
  * ------------------------------------------------------------------ */
 function Dashboard({user}:{user:User}){
@@ -1075,13 +1181,22 @@ function Dashboard({user}:{user:User}){
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [flagged,setFlagged]=useState(false); // signed-in UID not found in its profile: restricted account
  const [addingPost,setAddingPost]=useState(false);
- const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false);
+ const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false);
  const confirm=useConfirm();const toast=useToast();
  const isPremium=!!profile?.premium;
  const locked=!!profile; // after initial setup: bio + any still-empty optional fields are editable
  const fieldLocked=(v:any)=>locked&&!!String(v??"").trim(); // a field that already has a value is locked
  // Profile and inbox stay hidden until asked for — except a brand-new user, who needs the create form.
  useEffect(()=>{if(!loadingProfile&&!profile&&!flagged)setProfileOpen(true);},[loadingProfile,profile,flagged]);
+
+ // Arriving from "Help?" on the owner's public profile (/?tour=1): open the tour once the profile has loaded.
+ const wantTour=useRef(typeof location!=="undefined"&&new URLSearchParams(location.search).get("tour")==="1");
+ useEffect(()=>{
+  if(loadingProfile||!wantTour.current)return;
+  wantTour.current=false;
+  try{history.replaceState(null,"",location.pathname);}catch{}
+  setTourOpen(true);
+ },[loadingProfile]);
 
  useEffect(()=>{(async()=>{
   try{
@@ -1127,6 +1242,7 @@ function Dashboard({user}:{user:User}){
    await setDoc(doc(profileDb,"profiles",x),p,{merge:true});
    await setDoc(doc(profileDb,"users",user.uid),{username:x,updatedAt:serverTimestamp()},{merge:true});
    setProfile((prev:any)=>({...prev,...p}));setEditing(false);toast("success","Profile saved.");
+   setTourOpen(true); // brand-new profile: show the tour
   }catch(x:any){setErr(fail(toast,x,"Unable to save profile"));}
   finally{setSavingProfile(false);}
  }
@@ -1189,7 +1305,13 @@ function Dashboard({user}:{user:User}){
   finally{setDeletingProfile(false);}
  }
 
- return <main className="spts-page"><header><h1>Dashboard</h1><button className="spts-ghost" onClick={()=>signOut(profileAuth)}>Log out</button></header>
+ return <main className="spts-page"><header><h1>Dashboard</h1>
+  <div className="spts-header-actions">
+   <button type="button" className="spts-help-btn" onClick={()=>setTourOpen(true)}>Help?</button>
+   <button className="spts-ghost" onClick={()=>signOut(profileAuth)}>Log out</button>
+  </div>
+ </header>
+ {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setProfileOpen(true),showInbox:()=>setInboxOpen(true)})} onClose={()=>setTourOpen(false)}/>}
 
  <div className="spts-dash-actions">
   {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setProfileOpen(o=>!o)}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
@@ -1284,7 +1406,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  const [pendingDeleteId,setPendingDeleteId]=useState<string|null>(null);
  const [showAllPosts,setShowAllPosts]=useState(false);
  const [copied,setCopied]=useState(false);
- const [postsOpen,setPostsOpen]=useState(false),[msgOpen,setMsgOpen]=useState(false),[avatarOpen,setAvatarOpen]=useState(false);
+ const [postsOpen,setPostsOpen]=useState(false),[msgOpen,setMsgOpen]=useState(false),[avatarOpen,setAvatarOpen]=useState(false),[helpOpen,setHelpOpen]=useState(false);
  const confirm=useConfirm();const toast=useToast();const hint=useHint();
 
  // On small screens Posts / Message open full screen; lock the page behind them while they're open.
@@ -1354,6 +1476,8 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  <div className={`spts-profile-layout${postsOpen||msgOpen?" spts-has-panel":""}`}>
 
  <section className="spts-profile-hero">
+  {/* Owner: back to the dashboard tour. Everyone else: a short guide to this profile. */}
+  <button type="button" className="spts-help-btn" onClick={()=>{ if(canDeletePosts)window.location.assign(DASHBOARD_TOUR_URL); else setHelpOpen(true); }}>Help?</button>
   {p.photoUrl
    ?<button type="button" className="spts-avatar-btn" onClick={()=>setAvatarOpen(true)} aria-label="View profile picture full screen"><img className="spts-avatar-lg" src={p.photoUrl} alt={p.displayName}/></button>
    :<div className="spts-avatar-lg spts-avatar-fallback" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
@@ -1419,6 +1543,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  </aside>}
 
  </div>
+ {helpOpen&&<ProfileHelp p={p} user={user} posts={posts.length} onClose={()=>setHelpOpen(false)}/>}
  {avatarOpen&&p.photoUrl&&<MediaLightbox post={{mediaUrl:p.photoUrl,caption:p.displayName}} isVideo={false} autoCloseMs={10000} onClose={()=>setAvatarOpen(false)}/>}
  </main>
 }
