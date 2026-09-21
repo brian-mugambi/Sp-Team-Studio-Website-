@@ -27,8 +27,10 @@ const PAYSTACK_UPGRADE_URL="https://paystack.shop/pay/bv5n43khmv";
 const MSG_MIN=1,MSG_MAX=2500;
 const COMMENT_MIN=1,COMMENT_MAX=1000;
 const CLAMP_CHARS=500;
-// Where the owner lands from "Help?" on their public profile (change if your dashboard lives elsewhere).
-const DASHBOARD_TOUR_URL="/?tour=1";
+// The dashboard is the page this component renders when there is no username in the URL (same page as
+// "Get your own profile"). Change DASHBOARD_PATH if your router mounts it somewhere else.
+const DASHBOARD_PATH="/profiles";
+const DASHBOARD_TOUR_URL=`${DASHBOARD_PATH}?tour=1`; // opens the tour on arrival
 
 /* Support on WhatsApp — the number is never shown; users only see "Contact support".
  * wa.me needs the number in international format, so set SUPPORT_COUNTRY_CODE
@@ -154,6 +156,7 @@ const ICON={
  check:"M20 6L9 17l-5-5",
  back:"M19 12H5M12 19l-7-7 7-7",
  next:"M5 12h14M12 5l7 7-7 7",
+ caret:"M6 9l6 6 6-6",
 };
 
 type Toast = { id: number; kind: "success"|"error"|"info"; text: string; action?: {label:string;href:string}; key?: string };
@@ -216,6 +219,18 @@ const HINTS={
  adScheduled:"Your portfolio is ready and goes live on its start date.",
  adWaiting:"Request received. We're preparing your portfolio.",
  adExpired:"This run has ended. You can request another.",
+ // Plain words people tap thinking they do something
+ dashTitle:"Dashboard: your private control panel. Only you can see it.",
+ cardProfile:"Profile: your public details. Tap Manage profile to change them.",
+ cardPosts:"Posts: photos and videos that show on your public profile.",
+ cardInbox:"Inbox: anonymous messages from visitors. Only you can read and reply.",
+ cardPortfolio:"Portfolio: an optional page for your work, linked from See portfolio on your profile.",
+ usernameOwn:"Your username is the last part of your public link. It can't be changed here; contact support if you need to.",
+ lockedField:"This field is locked after setup. Contact support to change it.",
+ handlePublic:"A username is unique to one profile and is part of this page's link.",
+ namePublic:"Tap Message to write to them, or See posts to browse their work.",
+ noPhoto:"This profile has no photo yet.",
+ postsPublic:"Posts this person has shared on their profile.",
 } as const;
 type HintKey=keyof typeof HINTS;
 
@@ -236,8 +251,10 @@ function useHint(){
  },[show]);
  return {props,show};
 }
-function Hint({k,children,className,plain}:{k:HintKey;children:React.ReactNode;className?:string;plain?:boolean}){
+// quiet: plain text with no underline or button styling; it only answers when tapped (for words people tap by mistake).
+function Hint({k,children,className,plain,quiet}:{k:HintKey;children:React.ReactNode;className?:string;plain?:boolean;quiet?:boolean}){
  const {props,show}=useHint();
+ if(quiet)return <span className={`spts-tip${className?" "+className:""}`} onClick={()=>show(k)}>{children}</span>;
  return <span role="button" tabIndex={0} className={`spts-hint${plain?"":" spts-hint-word"}${className?" "+className:""}`} {...props(k,true)}
   onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();show(k);} }}>{children}</span>;
 }
@@ -1055,7 +1072,7 @@ function Messages({user}:{user:User}){
   return onSnapshot(q,s=>{setConversations(s.docs.map(d=>({id:d.id,...d.data()} as any)));setLoading(false)},e=>{setErr(accessText(e,ACCESS_GENERIC));setLoading(false)});
  },[user.uid]);
  return <section className="spts-card">
-  <div className="spts-card-head"><h2>Inbox</h2><Hint k="inboxCount" plain className="spts-badge">{conversations.length}</Hint></div>
+  <div className="spts-card-head"><h2><Hint quiet k="cardInbox">Inbox</Hint></h2><Hint k="inboxCount" plain className="spts-badge">{conversations.length}</Hint></div>
   <AutoDeleteNotice text="Messages and replies are removed 24h after they're sent."/>
   {loading&&<p className="spts-muted">Loading messages…</p>}
   {err&&<p className="spts-error">Couldn't load messages: <ErrText text={err}/></p>}
@@ -1105,19 +1122,22 @@ function Tour({steps,onClose}:{steps:TourStep[];onClose:()=>void}){
 function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>void;showInbox:()=>void}):TourStep[]{
  const {profile,premium}=o;
  const steps:TourStep[]=[
-  {title:"Welcome to your dashboard",body:<p>A quick tour of where everything is. Skip any time, and reopen it with <b>Help?</b> at the top of this page.</p>},
+  {title:"Welcome to your dashboard",body:<p>A quick tour of where everything is. Skip any time, and reopen it from <b>Settings</b>, then <b>Help?</b>.</p>},
   profile
    ?{title:"Edit your profile",body:<p>Tap <b>Manage profile</b>, then <b>Edit</b>. After setup you can change your bio and fill any optional field you left empty. Your username, display name and filled fields are locked; use contact support to change those.</p>,action:{label:"Show me",run:o.showProfile}}
    :{title:"Create your profile",body:<p>Fill in a username and display name, then tap <b>Create profile</b>. Your username becomes your public link and can't be changed later.</p>,action:{label:"Show me",run:o.showProfile}},
+  {title:"Put links in your bio",body:<p>Links, emails and phone numbers in your bio become tappable on your public profile. Share your GitHub, project pages or any URL there. A bio can be up to 1000 characters; visitors see the first 500, then <b>See more</b>.</p>},
  ];
  if(profile)steps.push({
   title:"See your public profile",
-  body:<p>Under <b>Manage profile</b>, tap <b>View public profile</b> to see the page visitors get at <b>/profile/{profile.username}</b>. There, <b>Share profile</b> copies your link.</p>,
+  body:<p>Under <b>Manage profile</b>, tap <b>View public profile</b> to see the page visitors get at <b>/profile/{profile.username}</b>. Visitors can tap your photo to view it full screen, and <b>Share profile</b> copies your link.</p>,
   action:{label:"Open my public profile",href:`/profile/${profile.username}`},
  });
  steps.push(
+  {title:"Contact buttons",body:<p>The website, email and phone you add show as <b>Website</b>, <b>Email</b> and <b>Phone</b> buttons on your public profile. You can fill any you left empty from <b>Edit</b>.</p>},
   {title:"Add posts",body:<p>Posts appear on your public profile. Paste a photo or video link{premium?", or upload a file":" (Premium members can upload files)"}, add an optional caption, then tap <b>Add post</b>. You can keep up to {MAX_POSTS}. Manage or delete posts from your public profile.</p>},
-  {title:"Your inbox",body:<p>Tap <b>Go to inbox</b> to read messages from visitors. They're anonymous: you see a visitor ID, not a name. Reply in the thread, or use <b>Delete visitor</b> to remove someone with all their messages.</p>,action:{label:"Show me",run:o.showInbox}},
+  {title:"Likes and comments",body:<p>Signed-in visitors can like and comment on your posts. Comments can be up to {COMMENT_MAX} characters.</p>},
+  {title:"Your inbox",body:<p>Tap <b>Go to inbox</b> to read messages from visitors, up to {MSG_MAX} characters each. They're anonymous: you see a visitor ID, not a name. Reply in the thread, or use <b>Delete visitor</b> to remove someone with all their messages.</p>,action:{label:"Show me",run:o.showInbox}},
   {title:"Portfolio",body:premium
    ?<p>Upload your own HTML file (under 0.5 MB) in the <b>Portfolio</b> card and pick a duration of at least 1 week. While it's live it can't be removed. Visitors reach it from <b>See portfolio</b> on your profile.</p>
    :<p>In the <b>Portfolio</b> card, tap <b>Request portfolio</b>, say what it should show, and pick a duration and start date. We build it and it goes live for that time. Visitors reach it from <b>See portfolio</b> on your profile.</p>},
@@ -1126,9 +1146,67 @@ function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>
    :<p>Premium gives you a gold theme on your public profile, direct photo and video uploads for posts, and uploading your own portfolio instead of requesting one. Find <b>Upgrade to Premium</b> in the Profile card.</p>,
    ...(premium?{}:{action:{label:"Show me",run:o.showProfile}})},
   {title:"Auto delete",body:<p>Posts, comments, likes, messages and replies are removed 24 hours after they're created. It runs from the device that created them, so that device needs to be online with its browser data kept. Tap or hover any dotted word for a quick explanation.</p>},
-  {title:"Need a hand?",body:<p>Tap <b>Help?</b> any time to reopen this tour. For anything else, contact support.</p>,action:{label:"Contact support",href:supportUrl("Hi, I need help with my profile."),external:true}},
+  {title:"Settings",body:<p>Top right, <b>Settings</b> holds <b>Account</b> (where you can delete your profile, or be sent to support to do it), <b>Help?</b> (reopens this tour) and <b>Sign out</b>.</p>},
+  {title:"Need a hand?",body:<p>For anything this tour didn't cover, contact support.</p>,action:{label:"Contact support",href:supportUrl("Hi, I need help with my profile."),external:true}},
  );
  return steps;
+}
+
+// Settings dropdown on the dashboard: Account, Help?, Sign out.
+function SettingsMenu({onAccount,onHelp,onSignOut}:{onAccount:()=>void;onHelp:()=>void;onSignOut:()=>void}){
+ const [open,setOpen]=useState(false);
+ const ref=useRef<HTMLDivElement>(null);
+ useEffect(()=>{
+  if(!open)return;
+  const onDown=(e:PointerEvent)=>{ if(!ref.current?.contains(e.target as Node))setOpen(false); };
+  const onKey=(e:KeyboardEvent)=>{ if(e.key==="Escape")setOpen(false); };
+  document.addEventListener("pointerdown",onDown);
+  document.addEventListener("keydown",onKey);
+  return ()=>{document.removeEventListener("pointerdown",onDown);document.removeEventListener("keydown",onKey);};
+ },[open]);
+ const pick=(fn:()=>void)=>()=>{setOpen(false);fn();};
+ return <div className="spts-settings" ref={ref}>
+  <button type="button" className="spts-ghost" aria-haspopup="menu" aria-expanded={open} onClick={()=>setOpen(o=>!o)}>Settings <Ico d={ICON.caret}/></button>
+  {open&&<div className="spts-settings-menu" role="menu">
+   <button type="button" role="menuitem" onClick={pick(onAccount)}>Account</button>
+   <button type="button" role="menuitem" onClick={pick(onHelp)}>Help?</button>
+   <button type="button" role="menuitem" onClick={pick(onSignOut)}>Sign out</button>
+  </div>}
+ </div>;
+}
+
+// Account: who you're signed in as, and Delete profile. Deleting can't be done in the app, so after two failed
+// attempts the person is sent to support instead.
+const DELFAIL_KEY="spts_delfail_v1:";
+function readDelFails(uid:string):number{ try{return parseInt(localStorage.getItem(DELFAIL_KEY+uid)||"0",10)||0;}catch{return 0;} }
+function writeDelFails(uid:string,n:number){ try{ if(n>0)localStorage.setItem(DELFAIL_KEY+uid,String(n)); else localStorage.removeItem(DELFAIL_KEY+uid); }catch{} }
+
+function AccountModal({user,profile,delFails,busy,onDelete,onClose}:{user:User;profile:any|null;delFails:number;busy:boolean;onDelete:()=>void;onClose:()=>void}){
+ useEffect(()=>{
+  const onKey=(e:KeyboardEvent)=>{ if(e.key==="Escape")onClose(); };
+  window.addEventListener("keydown",onKey);
+  return ()=>window.removeEventListener("keydown",onKey);
+ },[onClose]);
+ return <div className="spts-modal-backdrop" role="dialog" aria-modal="true" aria-label="Account" onClick={onClose}>
+  <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
+   <h3 className="spts-modal-title">Account</h3>
+   <div className="spts-modal-body">
+    <p><span className="spts-muted">Email</span><br/>{user.email||"Not available"}</p>
+    <p><span className="spts-muted">Username</span><br/>{profile?`@${profile.username}`:"No profile yet"}</p>
+    {profile&&<>
+     <p><b>Delete profile</b></p>
+     <p className="spts-muted">Removes your public profile page and the link between your account and its username. Your posts, likes, comments and inbox messages are not removed.</p>
+     {delFails>=2&&<p className="spts-muted">This can't be done from the app right now. Support will delete it for you.</p>}
+    </>}
+   </div>
+   <div className="spts-modal-actions">
+    {profile&&(delFails>=2
+     ?<a className="spts-danger spts-link-btn" href={supportUrl(`Hi, I'd like to delete my profile. Username: @${profile.username}`)} target="_blank" rel="noreferrer">Contact support to delete</a>
+     :<SpinnerButton className="spts-danger" busy={busy} busyLabel="Deleting…" onClick={onDelete}>Delete profile</SpinnerButton>)}
+    <button type="button" className="spts-ghost" onClick={onClose}>Close</button>
+   </div>
+  </div>
+ </div>;
 }
 
 // "Help?" on a public profile, for everyone except the owner (who is sent to the dashboard tour instead).
@@ -1160,8 +1238,8 @@ function ProfileHelp({p,user,posts,onClose}:{p:any;user:User|null;posts:number;o
    </div>
    <div className="spts-modal-actions">
     {!user&&<a className="spts-ghost spts-link-btn" href="/profiles">Log in or create a profile</a>}
-    {user&&!loading&&profile&&<a className="spts-ghost spts-link-btn" href="/">Go to my dashboard</a>}
-    {user&&!loading&&!profile&&<a className="spts-ghost spts-link-btn" href="/">Create my profile</a>}
+    {user&&!loading&&profile&&<a className="spts-ghost spts-link-btn" href={DASHBOARD_PATH}>Go to my dashboard</a>}
+    {user&&!loading&&!profile&&<a className="spts-ghost spts-link-btn" href={DASHBOARD_PATH}>Create my profile</a>}
     <button type="button" onClick={onClose}>Close</button>
    </div>
   </div>
@@ -1181,7 +1259,10 @@ function Dashboard({user}:{user:User}){
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [flagged,setFlagged]=useState(false); // signed-in UID not found in its profile: restricted account
  const [addingPost,setAddingPost]=useState(false);
- const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false);
+ const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false);
+ const [delFails,setDelFails]=useState(()=>readDelFails(user.uid));
+ const {show:showHint}=useHint();
+ const lockedTap=()=>showHint("lockedField");
  const confirm=useConfirm();const toast=useToast();
  const isPremium=!!profile?.premium;
  const locked=!!profile; // after initial setup: bio + any still-empty optional fields are editable
@@ -1279,6 +1360,7 @@ function Dashboard({user}:{user:User}){
 
  async function deleteProfileOnly(){
   if(!profile)return;
+  if(delFails>=2){await sendToSupport();return;} // it has failed twice already: don't try again
   const ok=await confirm({
    title:"Delete your public profile?",
    danger:true,
@@ -1300,17 +1382,31 @@ function Dashboard({user}:{user:User}){
    await deleteDoc(doc(profileDb,"profiles",profile.username));
    await deleteDoc(doc(profileDb,"users",user.uid));
    setProfile(null);setU("");setName("");setBio("");setPhoto("");setWeb("");setEmail("");setPhone("");setEditing(true);
+   setDelFails(0);writeDelFails(user.uid,0);setAccountOpen(false);
    toast("success","Profile deleted.");
-  }catch(x:any){setErr(fail(toast,x,"Unable to delete profile"));}
+  }catch(x:any){
+   const n=delFails+1;setDelFails(n);writeDelFails(user.uid,n);
+   if(n>=2)await sendToSupport(); // second failure: straight to support
+   else setErr(fail(toast,x,"Unable to delete profile"));
+  }
   finally{setDeletingProfile(false);}
  }
+ async function sendToSupport(){
+  if(!profile)return;
+  const go=await confirm({
+   title:"Contact support to delete your profile",
+   confirmLabel:"Contact support",
+   body:<p className="spts-muted">We couldn't delete your profile from the app. Support can do it for you. Tap Contact support to message us on WhatsApp.</p>,
+  });
+  if(go)window.open(supportUrl(`Hi, I'd like to delete my profile. Username: @${profile.username}`),"_blank","noopener");
+ }
 
- return <main className="spts-page"><header><h1>Dashboard</h1>
+ return <main className="spts-page"><header><h1><Hint quiet k="dashTitle">Dashboard</Hint></h1>
   <div className="spts-header-actions">
-   <button type="button" className="spts-help-btn" onClick={()=>setTourOpen(true)}>Help?</button>
-   <button className="spts-ghost" onClick={()=>signOut(profileAuth)}>Log out</button>
+   <SettingsMenu onAccount={()=>setAccountOpen(true)} onHelp={()=>setTourOpen(true)} onSignOut={()=>signOut(profileAuth)}/>
   </div>
  </header>
+ {accountOpen&&<AccountModal user={user} profile={profile} delFails={delFails} busy={deletingProfile} onDelete={deleteProfileOnly} onClose={()=>setAccountOpen(false)}/>}
  {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setProfileOpen(true),showInbox:()=>setInboxOpen(true)})} onClose={()=>setTourOpen(false)}/>}
 
  <div className="spts-dash-actions">
@@ -1325,7 +1421,7 @@ function Dashboard({user}:{user:User}){
 
  {profileOpen&&!flagged&&<section className="spts-card">
   <div className="spts-card-head">
-   <h2>Profile</h2>
+   <h2><Hint quiet k="cardProfile">Profile</Hint></h2>
    <div className="spts-card-head-badges">
     {!editing&&profile&&<Hint k="live" plain className="spts-badge">Live</Hint>}
     {isPremium&&<Hint k="premium" plain className="spts-premium-tag">Premium</Hint>}
@@ -1337,13 +1433,12 @@ function Dashboard({user}:{user:User}){
   {!loadingProfile&&!editing&&profile&&<div className="spts-profile-summary">
    {profile.photoUrl&&<img className="spts-avatar-sm" src={profile.photoUrl} alt=""/>}
    <div>
-    <p className="spts-name">{profile.displayName} <span className="spts-muted">@{profile.username}</span></p>
+    <p className="spts-name">{profile.displayName} <span className="spts-muted"><Hint quiet k="usernameOwn">@{profile.username}</Hint></span></p>
     {profile.bio&&<p className="spts-muted"><ClampText text={profile.bio} plain/></p>}
    </div>
    <div className="spts-profile-summary-actions">
     <a href={`/profile/${profile.username}`}>View public profile</a>
     <button className="spts-ghost" onClick={()=>setEditing(true)}>Edit</button>
-    <SpinnerButton className="spts-danger" busy={deletingProfile} busyLabel="Deleting…" onClick={deleteProfileOnly}>Delete profile</SpinnerButton>
    </div>
   </div>}
 
@@ -1355,13 +1450,13 @@ function Dashboard({user}:{user:User}){
   {!loadingProfile&&editing&&<form onSubmit={save}>
    {locked&&<p className="spts-muted">Only your bio and empty fields can be edited. To change filled fields,{" "}
     <a className="spts-link" href={supportUrl(`Hi, I'd like to change my profile details. Username: @${profile.username}`)} target="_blank" rel="noreferrer">contact support</a>.</p>}
-   <label>Username<input required={!locked} readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="yourname" value={u} onChange={e=>setU(e.target.value)} disabled={savingProfile}/></label>
-   <label>Display name<input required={!locked} readOnly={locked} className={locked?"spts-readonly":undefined} placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} disabled={savingProfile}/></label>
+   <label>Username<input required={!locked} readOnly={locked} onClick={locked?lockedTap:undefined} className={locked?"spts-readonly":undefined} placeholder="yourname" value={u} onChange={e=>setU(e.target.value)} disabled={savingProfile}/></label>
+   <label>Display name<input required={!locked} readOnly={locked} onClick={locked?lockedTap:undefined} className={locked?"spts-readonly":undefined} placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} disabled={savingProfile}/></label>
    <label>Bio<textarea maxLength={1000} placeholder="Tell visitors about yourself" value={bio} onChange={e=>setBio(e.target.value)} disabled={savingProfile}/></label>
-   <label>Profile photo URL<input readOnly={fieldLocked(profile?.photoUrl)} className={fieldLocked(profile?.photoUrl)?"spts-readonly":undefined} placeholder="https://…" value={photo} onChange={e=>setPhoto(e.target.value)} disabled={savingProfile}/></label>
-   <label>Website URL<input readOnly={fieldLocked(profile?.websiteUrl)} className={fieldLocked(profile?.websiteUrl)?"spts-readonly":undefined} placeholder="https://…" value={web} onChange={e=>setWeb(e.target.value)} disabled={savingProfile}/></label>
-   <label>Public email<input type="email" readOnly={fieldLocked(profile?.email)} className={fieldLocked(profile?.email)?"spts-readonly":undefined} placeholder="Shown on your public profile" value={email} onChange={e=>setEmail(e.target.value)} disabled={savingProfile}/></label>
-   <label>Public phone<input readOnly={fieldLocked(profile?.phone)} className={fieldLocked(profile?.phone)?"spts-readonly":undefined} placeholder="Shown on your public profile" value={phone} onChange={e=>setPhone(e.target.value)} disabled={savingProfile}/></label>
+   <label>Profile photo URL<input readOnly={fieldLocked(profile?.photoUrl)} onClick={fieldLocked(profile?.photoUrl)?lockedTap:undefined} className={fieldLocked(profile?.photoUrl)?"spts-readonly":undefined} placeholder="https://…" value={photo} onChange={e=>setPhoto(e.target.value)} disabled={savingProfile}/></label>
+   <label>Website URL<input readOnly={fieldLocked(profile?.websiteUrl)} onClick={fieldLocked(profile?.websiteUrl)?lockedTap:undefined} className={fieldLocked(profile?.websiteUrl)?"spts-readonly":undefined} placeholder="https://…" value={web} onChange={e=>setWeb(e.target.value)} disabled={savingProfile}/></label>
+   <label>Public email<input type="email" readOnly={fieldLocked(profile?.email)} onClick={fieldLocked(profile?.email)?lockedTap:undefined} className={fieldLocked(profile?.email)?"spts-readonly":undefined} placeholder="Shown on your public profile" value={email} onChange={e=>setEmail(e.target.value)} disabled={savingProfile}/></label>
+   <label>Public phone<input readOnly={fieldLocked(profile?.phone)} onClick={fieldLocked(profile?.phone)?lockedTap:undefined} className={fieldLocked(profile?.phone)?"spts-readonly":undefined} placeholder="Shown on your public profile" value={phone} onChange={e=>setPhone(e.target.value)} disabled={savingProfile}/></label>
    <div className="spts-form-actions">
     <SpinnerButton type="submit" busy={savingProfile} busyLabel="Saving…">{profile?"Save changes":"Create profile"}</SpinnerButton>
     {profile&&<button type="button" className="spts-ghost" onClick={cancelEdit} disabled={savingProfile}>Cancel</button>}
@@ -1374,7 +1469,7 @@ function Dashboard({user}:{user:User}){
  {profile&&<AdRequest user={user} profile={profile}/>}
 
  <section className="spts-card">
-  <div className="spts-card-head"><h2>Posts</h2><Hint k="postCount" plain className="spts-badge">{posts.length}/{MAX_POSTS}</Hint></div>
+  <div className="spts-card-head"><h2><Hint quiet k="cardPosts">Posts</Hint></h2><Hint k="postCount" plain className="spts-badge">{posts.length}/{MAX_POSTS}</Hint></div>
   <p className="spts-muted">{isPremium?"Paste a URL, or upload a file directly.":"URLs only — no uploads. Upgrade to Premium to upload files directly."}</p>
   <AutoDeleteNotice text="Posts, with their likes and comments, are removed 24h after you add them."/>
   <form onSubmit={add}>
@@ -1480,9 +1575,9 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   <button type="button" className="spts-help-btn" onClick={()=>{ if(canDeletePosts)window.location.assign(DASHBOARD_TOUR_URL); else setHelpOpen(true); }}>Help?</button>
   {p.photoUrl
    ?<button type="button" className="spts-avatar-btn" onClick={()=>setAvatarOpen(true)} aria-label="View profile picture full screen"><img className="spts-avatar-lg" src={p.photoUrl} alt={p.displayName}/></button>
-   :<div className="spts-avatar-lg spts-avatar-fallback" aria-hidden="true">{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
-  <h1 className="spts-profile-name">{p.displayName}</h1>
-  <p className="spts-profile-handle">@{p.username}</p>
+   :<div className="spts-avatar-lg spts-avatar-fallback" onClick={()=>hint.show("noPhoto")}>{(p.displayName||"?").trim().charAt(0).toUpperCase()}</div>}
+  <h1 className="spts-profile-name"><Hint quiet k="namePublic">{p.displayName}</Hint></h1>
+  <p className="spts-profile-handle"><Hint quiet k="handlePublic">@{p.username}</Hint></p>
   {p.premium&&<Hint k="premium" plain className="spts-premium-badge">Premium</Hint>}
   {p.bio&&<p className="spts-bio spts-profile-bio"><ClampText text={p.bio}/></p>}
   {(p.websiteUrl||p.email||p.phone)&&<div className="spts-profile-meta">
@@ -1505,7 +1600,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
 
  {postsOpen&&<aside className="spts-profile-panel" aria-label="Posts">
   <div className="spts-panel-bar">
-   <div className="spts-panel-title"><h2>Posts</h2><span className="spts-badge">{posts.length}</span></div>
+   <div className="spts-panel-title"><h2><Hint quiet k="postsPublic">Posts</Hint></h2><span className="spts-badge">{posts.length}</span></div>
    <button type="button" className="spts-ghost spts-panel-close" onClick={()=>setPostsOpen(false)} aria-label="Hide posts"><Ico d={ICON.close}/></button>
   </div>
   <section className="spts-card spts-section">
@@ -1677,19 +1772,19 @@ function UpgradeSuccess({user}:{user:User|null}){
   {status==="done"&&<>
    <h2>You're Premium</h2>
    <p className="spts-muted">Your premium public-profile theme, direct file uploads and portfolio upload are unlocked.</p>
-   <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
+   <a className="spts-ghost spts-link-btn" href={DASHBOARD_PATH}>Back to dashboard</a>
   </>}
   {status==="error"&&errKind==="flagged"&&<>
    <h2>Account restricted</h2>
    <AccountFlagNotice uid={user?.uid}/>
-   <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
+   <a className="spts-ghost spts-link-btn" href={DASHBOARD_PATH}>Back to dashboard</a>
   </>}
   {status==="error"&&errKind!=="flagged"&&<>
    <h2>Couldn't confirm your upgrade</h2>
    <p className="spts-error"><ErrText text={err}/></p>
    {errKind==="retry"&&<button type="button" onClick={()=>window.location.reload()}>Try again</button>}
    {errKind!=="retry"&&<p className="spts-muted">{errKind==="support"?"Still not working? ":""}Already paid? <a className="spts-link" href={supportUrl("Hi, I paid for Premium but the upgrade didn't confirm.")} target="_blank" rel="noreferrer">Contact support</a>.</p>}
-   <a className="spts-ghost spts-link-btn" href="/">Back to dashboard</a>
+   <a className="spts-ghost spts-link-btn" href={DASHBOARD_PATH}>Back to dashboard</a>
   </>}
  </section></main>;
 }
@@ -2018,7 +2113,7 @@ function PortfolioUpload({profile}:{profile:any}){
  }
 
  return <section className="spts-card">
-  <div className="spts-card-head"><h2>Portfolio</h2>{badge&&phase?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
+  <div className="spts-card-head"><h2><Hint quiet k="cardPortfolio">Portfolio</Hint></h2>{badge&&phase?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
   <p className="spts-muted">
    {!ad&&<>Upload an HTML file and choose how long it stays live (1 week or more). No request needed.</>}
    {phase==="live"&&locked&&ad?.endDate&&<>Your portfolio is live until {prettyDate(ad.endDate)} and can't be removed before then. Uploading again replaces the page and keeps the same dates.</>}
@@ -2062,7 +2157,7 @@ function AdRequestCard({user,profile}:{user:User;profile:any}){
  const range=(s?:string,e?:string)=>s&&e?`${prettyDate(s)} – ${prettyDate(e)}`:e?`until ${prettyDate(e)}`:s?`from ${prettyDate(s)}`:"";
 
  return <section className="spts-card">
-  <div className="spts-card-head"><h2>Portfolio</h2>{badge&&phase&&BADGE_HINT[phase]?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
+  <div className="spts-card-head"><h2><Hint quiet k="cardPortfolio">Portfolio</Hint></h2>{badge&&phase&&BADGE_HINT[phase]?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
   <p className="spts-muted">
    {phase==="live"&&<>Your portfolio is live{status?.endDate?` until ${prettyDate(status.endDate)}`:""}. You can request again once it expires.</>}
    {phase==="scheduled"&&<>Your portfolio is ready and goes live {status?.startDate?`on ${prettyDate(status.startDate)}`:"soon"}.</>}
@@ -2094,7 +2189,7 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
   <p className="spts-muted">You need a profile first.</p>
  </>;
  if(profile.premium)return <>
-  <a className="spts-ad-link spts-ad-cta" href="/">Add your portfolio</a>
+  <a className="spts-ad-link spts-ad-cta" href={DASHBOARD_PATH}>Add your portfolio</a>
   <p className="spts-muted">Premium: upload your own HTML file from your dashboard.</p>
  </>;
  return <>

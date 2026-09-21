@@ -2114,3 +2114,23 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
 .spts-tour-dots{display:flex;justify-content:center;gap:6px;margin:16px 0 0;}
 .spts-tour-dots span{width:6px;height:6px;border-radius:50%;background:var(--line);}
 .spts-tour-dots span.on{background:var(--cyan);}
+
+
+/* ================================================================
+   SETTINGS DROPDOWN + QUIET TIPS
+   ================================================================ */
+.spts-tip{cursor:default;}
+
+.spts-settings{position:relative;}
+.spts-settings > button{display:inline-flex;align-items:center;gap:6px;}
+.spts-page .spts-settings-menu{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:60;min-width:170px;
+  display:grid;gap:2px;padding:4px;
+  background:var(--bg);border:1px solid var(--line);border-radius:2px;box-shadow:0 16px 40px rgba(0,0,0,.5);
+}
+.spts-page .spts-settings-menu button{
+  min-height:0;padding:10px 12px;border:0;border-radius:2px;background:transparent;box-shadow:none;
+  color:var(--white);text-align:left;font-size:.82rem;
+}
+.spts-page .spts-settings-menu button:hover,
+.spts-page .spts-settings-menu button:focus-visible{background:rgba(34,211,238,.08);color:var(--cyan);border:0;box-shadow:none;}
