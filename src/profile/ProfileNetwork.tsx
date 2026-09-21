@@ -1149,7 +1149,7 @@ function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>
   {title:"Likes and comments",body:<p>Signed-in visitors can like and comment on your posts. Comments can be up to {COMMENT_MAX} characters.</p>},
   {title:"Your inbox",body:<p>Tap <b>Go to inbox</b> to read messages from visitors, up to {MSG_MAX} characters each. They're anonymous: you see a visitor ID, not a name. Reply in the thread, or use <b>Delete visitor</b> to remove someone with all their messages.</p>,action:{label:"Show me",run:o.showInbox}},
   {title:"Portfolio",body:premium
-   ?<p>Upload your own HTML file (under 0.5 MB) in the <b>Portfolio</b> card and pick a duration of at least 1 week. While it's live it can't be removed. Visitors reach it from <b>See portfolio</b> on your profile.</p>
+   ?<p>Upload your own HTML file (under 0.5 MB) in the <b>Portfolio</b> card and pick a duration of at least 1 week. While it's live it can't be removed. Visitors reach it from <b>See portfolio</b> on your profile, and you can let them save it as an HTML file with <b>Settings</b>, then <b>Portfolio download</b>.</p>
    :<p>In the <b>Portfolio</b> card, tap <b>Request portfolio</b>, say what it should show, and pick a duration and start date. We build it and it goes live for that time. Visitors reach it from <b>See portfolio</b> on your profile.</p>},
   {title:premium?"Your Premium features":"What Premium adds",body:premium
    ?<p>You have the gold theme on your public profile, direct photo and video uploads for posts, and your own portfolio upload.</p>
@@ -1464,7 +1464,7 @@ function ShareProfileModal({profile,onClose}:{profile:any;onClose:()=>void}){
 }
 
 // Settings dropdown on the dashboard: Account, Help?, Sign out.
-function SettingsMenu({onAccount,onHelp,onSignOut}:{onAccount:()=>void;onHelp:()=>void;onSignOut:()=>void}){
+function SettingsMenu({onAccount,onHelp,onSignOut,download}:{onAccount:()=>void;onHelp:()=>void;onSignOut:()=>void;download?:{on:boolean;busy:boolean;onToggle:()=>void}}){
  const [open,setOpen]=useState(false);
  const ref=useRef<HTMLDivElement>(null);
  useEffect(()=>{
@@ -1480,6 +1480,7 @@ function SettingsMenu({onAccount,onHelp,onSignOut}:{onAccount:()=>void;onHelp:()
   <button type="button" className="spts-ghost" aria-haspopup="menu" aria-expanded={open} onClick={()=>setOpen(o=>!o)}>Settings <Ico d={ICON.caret}/></button>
   {open&&<div className="spts-settings-menu" role="menu">
    <button type="button" role="menuitem" onClick={pick(onAccount)}>Account</button>
+   {download&&<button type="button" role="menuitemcheckbox" aria-checked={download.on} disabled={download.busy} onClick={pick(download.onToggle)}>Portfolio download: {download.on?"On":"Off"}</button>}
    <button type="button" role="menuitem" onClick={pick(onHelp)}>Help?</button>
    <button type="button" role="menuitem" onClick={pick(onSignOut)}>Sign out</button>
   </div>}
@@ -1573,9 +1574,24 @@ function Dashboard({user}:{user:User}){
  const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false),[qrOpen,setQrOpen]=useState(false);
  const [delFails,setDelFails]=useState(()=>readDelFails(user.uid));
  const hint=useHint();const showHint=hint.show;
+ const [dlBusy,setDlBusy]=useState(false);
  const lockedTap=()=>showHint("lockedField");
  const confirm=useConfirm();const toast=useToast();
  const isPremium=!!profile?.premium;
+ const downloadOn=isPremium&&(profile?.portfolioDownload===undefined?PORTFOLIO_DOWNLOAD_DEFAULT:profile.portfolioDownload===true);
+ // Settings > Portfolio download (Premium): lets visitors save the portfolio as a .html file.
+ async function toggleDownload(){
+  if(!profile||!isPremium||dlBusy)return;
+  const next=!downloadOn;
+  setDlBusy(true);
+  try{
+   await setDoc(doc(profileDb,"profiles",profile.username),{portfolioDownload:next,updatedAt:serverTimestamp()},{merge:true});
+   setProfile((prev:any)=>({...prev,portfolioDownload:next}));
+   writeDlCache(profile.username,next);
+   toast("success",next?"Portfolio download is on. Visitors can save your page as an HTML file.":"Portfolio download is off.");
+  }catch(x:any){ fail(toast,x,"Unable to change portfolio download"); }
+  finally{ setDlBusy(false); }
+ }
  const locked=!!profile; // after initial setup: bio + any still-empty optional fields are editable
  const fieldLocked=(v:any)=>locked&&!!String(v??"").trim(); // a field that already has a value is locked
  // Profile and inbox stay hidden until asked for — except a brand-new user, who needs the create form.
@@ -1714,7 +1730,7 @@ function Dashboard({user}:{user:User}){
 
  return <main className="spts-page"><header><h1><Hint quiet k="dashTitle">Dashboard</Hint></h1>
   <div className="spts-header-actions">
-   <SettingsMenu onAccount={()=>setAccountOpen(true)} onHelp={()=>setTourOpen(true)} onSignOut={()=>signOut(profileAuth)}/>
+   <SettingsMenu onAccount={()=>setAccountOpen(true)} onHelp={()=>setTourOpen(true)} onSignOut={()=>signOut(profileAuth)} download={isPremium&&profile?{on:downloadOn,busy:dlBusy,onToggle:toggleDownload}:undefined}/>
   </div>
  </header>
  {qrOpen&&profile&&<QrModal profile={profile} onClose={()=>setQrOpen(false)}/>}
@@ -1831,7 +1847,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   const s=await getDoc(doc(profileDb,"profiles",normalizeUsername(username)));
   if(!s.exists()){setNotFound(true);return;}
   setP(s.data());
-  prefetchAd(s.data().username||normalizeUsername(username),!!s.data().premium); // so "See portfolio" opens instantly
+  prefetchAd(s.data().username||normalizeUsername(username),!!s.data().premium,!!s.data().premium&&downloadFlag(s.data())); // so "See portfolio" opens instantly
   const q=query(collection(profileDb,"posts"),where("ownerId","==",s.data().uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
   onSnapshot(q,x=>setPosts(x.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(accessText(e,ACCESS_GENERIC)));
  }catch(x:any){setErr(fail(toast,x,"Unable to load profile"));}})()},[username]);
@@ -2135,7 +2151,9 @@ const AD_DURATIONS=[
 ];
 // Premium portfolios run for a set duration like basic ones, but never less than one week.
 const PORTFOLIO_DURATIONS=AD_DURATIONS.filter(d=>d.days>=7);
-const AD_CACHE_KEY="spts_ad_v1:",AD_LASTREQ_KEY="spts_adreq_v1:",AD_PREMIUM_KEY="spts_adpremium_v1:";
+const AD_CACHE_KEY="spts_ad_v1:",AD_LASTREQ_KEY="spts_adreq_v1:",AD_PREMIUM_KEY="spts_adpremium_v1:",AD_DL_KEY="spts_addl_v1:";
+// Premium owners can switch portfolio download on or off in Settings. This is the state before they choose.
+const PORTFOLIO_DOWNLOAD_DEFAULT=false;
 // Premium owners upload their own portfolio: one .html file, strictly under 0.5 MB.
 const PORTFOLIO_MAX_BYTES=Math.floor(0.5*1024*1024);
 
@@ -2171,19 +2189,41 @@ async function fetchAd(u:string):Promise<AdDoc|null>{
  const s=await getDoc(doc(profileDb,"profiles",u,"ad","code"));
  return s.exists()?parseAd(s.data()):null;
 }
-// Whether the profile is Premium decides if the portfolio viewer offers the optional "Open in new tab" button.
-function readPremiumCache(u:string):boolean|null{
- try{const r=localStorage.getItem(AD_PREMIUM_KEY+u);return r===null?null:r==="1";}catch{return null;}
+// Whether the profile is Premium, and whether its owner allows portfolio download, decide if the viewer shows
+// the Download button. Both come from the profile document and are cached like the portfolio itself.
+function readBoolCache(key:string,u:string):boolean|null{
+ try{const r=localStorage.getItem(key+u);return r===null?null:r==="1";}catch{return null;}
 }
-function writePremiumCache(u:string,v:boolean){ try{localStorage.setItem(AD_PREMIUM_KEY+u,v?"1":"0");}catch{} }
-async function fetchPremium(u:string):Promise<boolean>{
+function writeBoolCache(key:string,u:string,v:boolean){ try{localStorage.setItem(key+u,v?"1":"0");}catch{} }
+const readPremiumCache=(u:string)=>readBoolCache(AD_PREMIUM_KEY,u);
+const writePremiumCache=(u:string,v:boolean)=>writeBoolCache(AD_PREMIUM_KEY,u,v);
+const readDlCache=(u:string)=>readBoolCache(AD_DL_KEY,u);
+const writeDlCache=(u:string,v:boolean)=>writeBoolCache(AD_DL_KEY,u,v);
+const downloadFlag=(d:any)=>d?.portfolioDownload===undefined?PORTFOLIO_DOWNLOAD_DEFAULT:d.portfolioDownload===true;
+async function fetchPortfolioMeta(u:string):Promise<{premium:boolean;download:boolean}>{
  const s=await getDoc(doc(profileDb,"profiles",u));
- return s.exists()&&s.data().premium===true;
+ if(!s.exists())return {premium:false,download:false};
+ const d=s.data();
+ return {premium:d.premium===true,download:d.premium===true&&downloadFlag(d)};
 }
 // Warm the cache (used by the public profile so "See portfolio" opens instantly).
-function prefetchAd(u:string,premium?:boolean){
+function prefetchAd(u:string,premium?:boolean,download?:boolean){
  if(typeof premium==="boolean")writePremiumCache(u,premium);
+ if(typeof download==="boolean")writeDlCache(u,download);
  fetchAd(u).then(a=>writeAdCache(u,a)).catch(()=>{});
+}
+
+// Portfolio download: the saved html becomes a .html file. It has no doctype added (so it renders as it does in
+// the viewer) but gets a UTF-8 charset when it has none, and is wrapped in <html> if it was only a fragment.
+function toDownloadableHtml(html:string):string{
+ let h=html;
+ const hasCharset=/<meta[^>]+charset/i.test(h);
+ if(!/<html[\s>]/i.test(h))return `<html>\n<head><meta charset="utf-8"></head>\n<body>\n${h}\n</body>\n</html>\n`;
+ if(!hasCharset){
+  const head=/<head(?:\s[^>]*)?>/i;
+  h=head.test(h)?h.replace(head,m=>m+'<meta charset="utf-8">'):h.replace(/<html(?:\s[^>]*)?>/i,m=>m+'<head><meta charset="utf-8"></head>');
+ }
+ return h;
 }
 
 // Premium upload: the file is checked, read as UTF-8 text and normalised (BOM and outer whitespace
@@ -2515,16 +2555,17 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
 
 // Public portfolio page (route + Firestore names still say "ad"). Runs the html string in a sandboxed iframe
 // (no allow-same-origin), so the code can't reach this app's auth session, storage or DOM. Same for every profile.
-// Premium portfolios also get an optional "Open in new tab" button (see openLocally).
+// Premium portfolios can also offer a Download button (the owner switches it on in Settings).
 // A cached copy renders on the very first paint (no loading screen); Firestore then refreshes it silently.
 function AdView({username,user,authLoading}:{username:string;user:User|null;authLoading:boolean}){
  const uname=normalizeUsername(username);
  const [ad,setAd]=useState<AdDoc|null>(()=>typeof window!=="undefined"?readAdCache(uname):null);
  const [premium,setPremium]=useState<boolean|null>(()=>typeof window!=="undefined"?readPremiumCache(uname):null);
+ const [dlOk,setDlOk]=useState<boolean|null>(()=>typeof window!=="undefined"?readDlCache(uname):null);
  const [settled,setSettled]=useState(false),[failed,setFailed]=useState(false),[failedText,setFailedText]=useState(ACCESS_GENERIC),[tries,setTries]=useState(0);
  const [copied,setCopied]=useState(false);
  const [bare,setBare]=useState(false); // "full screen": hides the bar and frame; the portfolio fills the window
- const toast=useToast();const confirm=useConfirm();
+ const toast=useToast();
  async function copyLink(){
   try{
    await navigator.clipboard.writeText(`${location.origin}/profile/${uname}/ad`);
@@ -2535,11 +2576,11 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  useEffect(()=>{
   let alive=true;
   setFailed(false);
-  Promise.all([fetchAd(uname),fetchPremium(uname).catch(()=>false)]).then(([a,pr])=>{
+  Promise.all([fetchAd(uname),fetchPortfolioMeta(uname).catch(()=>({premium:false,download:false}))]).then(([a,meta])=>{
    if(!alive)return;
-   writeAdCache(uname,a);writePremiumCache(uname,pr);
+   writeAdCache(uname,a);writePremiumCache(uname,meta.premium);writeDlCache(uname,meta.download);
    setAd(prev=>sameAd(prev,a)?prev:a); // unchanged ad => no iframe reload
-   setPremium(pr);
+   setPremium(meta.premium);setDlOk(meta.download);
    setSettled(true);
   }).catch((e:any)=>{
    if(!alive)return;
@@ -2561,22 +2602,17 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
   return ()=>{el.classList.remove("spts-ad-bare");document.removeEventListener("keydown",onKey);};
  },[bareOn]);
 
- // Optional, Premium portfolios only, and only when the visitor taps it. The saved html is turned into a
- // local blob: page on this device and opened in a new tab, outside the sandbox. That page shares this
- // site's origin, so the visitor is asked to confirm first.
- async function openLocally(){
+ // Premium portfolios whose owner has turned download on: the visitor can save the page as a .html file.
+ function downloadPortfolio(){
   if(!ad)return;
-  const ok=await confirm({
-   title:"Open outside the sandbox?",
-   body:<p className="spts-muted">This opens the portfolio in a new tab on your device without the sandbox, so its code runs with the same access as this site. Only continue if you trust @{uname}.</p>,
-   confirmLabel:"Open in new tab",
-  });
-  if(!ok)return;
   try{
-   const url=URL.createObjectURL(new Blob([ad.html],{type:"text/html;charset=utf-8"}));
-   window.open(url,"_blank","noopener");
-   setTimeout(()=>URL.revokeObjectURL(url),10*60*1000);
-  }catch{ toast("error","Couldn't open the portfolio in a new tab."); }
+   const href=URL.createObjectURL(new Blob([toDownloadableHtml(ad.html)],{type:"text/html;charset=utf-8"}));
+   const a=document.createElement("a");
+   a.href=href;a.download=`${uname}-portfolio.html`;
+   document.body.appendChild(a);a.click();a.remove();
+   setTimeout(()=>URL.revokeObjectURL(href),1000);
+   toast("success","Portfolio downloaded.");
+  }catch{ toast("error","Couldn't download the portfolio."); }
  }
 
  return <main className={`spts-ad${bareOn?" spts-ad-bare":""}`}>
@@ -2585,7 +2621,7 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
    <div className="spts-ad-bar-actions">
     {live&&<button type="button" className="spts-ghost" onClick={()=>setBare(true)}>Full screen</button>}
     <button type="button" className="spts-ghost" onClick={copyLink}>{copied?<><Ico d={ICON.check}/> Copied</>:"Copy link"}</button>
-    {live&&premium===true&&<button type="button" className="spts-ghost" onClick={openLocally}>Open in new tab</button>}
+    {live&&premium===true&&dlOk===true&&<button type="button" className="spts-ghost" onClick={downloadPortfolio}>Download</button>}
    </div>
   </header>}
   {live&&<iframe
