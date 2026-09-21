@@ -231,6 +231,7 @@ const HINTS={
  namePublic:"Tap Message to write to them, or See posts to browse their work.",
  noPhoto:"This profile has no photo yet.",
  postsPublic:"Posts this person has shared on their profile.",
+ shareOwn:"Writes a ready-to-send message with your profile link, copies it, and opens WhatsApp, email and more.",
 } as const;
 type HintKey=keyof typeof HINTS;
 
@@ -1133,6 +1134,10 @@ function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>
   body:<p>Under <b>Manage profile</b>, tap <b>View public profile</b> to see the page visitors get at <b>/profile/{profile.username}</b>. Visitors can tap your photo to view it full screen, and <b>Share profile</b> copies your link.</p>,
   action:{label:"Open my public profile",href:`/profile/${profile.username}`},
  });
+ if(profile)steps.push({
+  title:"Share your profile",
+  body:<p>Tap <b>Share profile</b>, type the person's name, and the message is written for you and copied. Then send it through WhatsApp, Telegram, Facebook, email or any other app on your device.</p>,
+ });
  steps.push(
   {title:"Contact buttons",body:<p>The website, email and phone you add show as <b>Website</b>, <b>Email</b> and <b>Phone</b> buttons on your public profile. You can fill any you left empty from <b>Edit</b>.</p>},
   {title:"Add posts",body:<p>Posts appear on your public profile. Paste a photo or video link{premium?", or upload a file":" (Premium members can upload files)"}, add an optional caption, then tap <b>Add post</b>. You can keep up to {MAX_POSTS}. Manage or delete posts from your public profile.</p>},
@@ -1150,6 +1155,72 @@ function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>
   {title:"Need a hand?",body:<p>For anything this tour didn't cover, contact support.</p>,action:{label:"Contact support",href:supportUrl("Hi, I need help with my profile."),external:true}},
  );
  return steps;
+}
+
+// Share profile: asks who it's for, writes the message with their name and your link, copies it, and offers
+// the apps on the device (native share sheet where available, plus direct WhatsApp / Telegram / Facebook / email).
+function shareMessage(name:string,username:string){
+ const who=name.trim()||"there";
+ return `Hey ${who}, check out my profile page: ${location.origin}/profile/${username}\n\nMy links and projects are all in one spot. Tap "Message" if you want to send me something. It's anonymous.`;
+}
+function ShareProfileModal({profile,onClose}:{profile:any;onClose:()=>void}){
+ const toast=useToast();
+ const [name,setName]=useState("");
+ const [msg,setMsg]=useState<string|null>(null); // set once the message has been made
+ const canNativeShare=typeof navigator!=="undefined"&&typeof (navigator as any).share==="function";
+ const url=`${location.origin}/profile/${profile.username}`;
+ useEffect(()=>{
+  const onKey=(e:KeyboardEvent)=>{ if(e.key==="Escape")onClose(); };
+  window.addEventListener("keydown",onKey);
+  return ()=>window.removeEventListener("keydown",onKey);
+ },[onClose]);
+ async function copy(text:string){
+  try{ await navigator.clipboard.writeText(text); toast("success","Message copied. Paste it anywhere."); }
+  catch{ toast("error","Couldn't copy. Select the message and copy it."); }
+ }
+ async function make(e:React.FormEvent){
+  e.preventDefault();
+  const m=shareMessage(name,profile.username);
+  setMsg(m);
+  await copy(m);
+ }
+ async function nativeShare(){
+  try{ await (navigator as any).share({title:"My profile",text:msg}); }catch{/* closed without sharing */}
+ }
+ const enc=encodeURIComponent;
+ return <div className="spts-modal-backdrop" role="dialog" aria-modal="true" aria-label="Share profile" onClick={onClose}>
+  <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
+   <h3 className="spts-modal-title">Share your profile</h3>
+   {msg===null
+    ?<form onSubmit={make}>
+      <label>Who are you sharing it with?
+       <input autoFocus maxLength={40} placeholder="Their name" value={name} onChange={e=>setName(e.target.value)}/>
+      </label>
+      <p className="spts-muted">We'll write the message with their name and your link, and copy it for you.</p>
+      <div className="spts-modal-actions">
+       <button type="button" className="spts-ghost" onClick={onClose}>Cancel</button>
+       <button type="submit">Create message</button>
+      </div>
+     </form>
+    :<>
+      <div className="spts-share-preview">{msg}</div>
+      <p className="spts-muted">Copied to your clipboard. Send it with:</p>
+      <div className="spts-share-actions">
+       {canNativeShare&&<button type="button" onClick={nativeShare}>More apps</button>}
+       <a className="spts-ghost spts-link-btn" href={`https://wa.me/?text=${enc(msg)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+       <a className="spts-ghost spts-link-btn" href={`https://t.me/share/url?url=${enc(url)}&text=${enc(msg)}`} target="_blank" rel="noopener noreferrer">Telegram</a>
+       <a className="spts-ghost spts-link-btn" href={`https://www.facebook.com/sharer/sharer.php?u=${enc(url)}`} target="_blank" rel="noopener noreferrer">Facebook</a>
+       <a className="spts-ghost spts-link-btn" href={`mailto:?subject=${enc("My profile page")}&body=${enc(msg)}`}>Email</a>
+       <button type="button" className="spts-ghost" onClick={()=>copy(msg)}>Copy again</button>
+      </div>
+      <p className="spts-muted">Facebook shares only the link, so paste the copied message in with it.</p>
+      <div className="spts-modal-actions">
+       <button type="button" className="spts-ghost" onClick={()=>setMsg(null)}>Change name</button>
+       <button type="button" onClick={onClose}>Done</button>
+      </div>
+     </>}
+  </div>
+ </div>;
 }
 
 // Settings dropdown on the dashboard: Account, Help?, Sign out.
@@ -1259,9 +1330,9 @@ function Dashboard({user}:{user:User}){
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [flagged,setFlagged]=useState(false); // signed-in UID not found in its profile: restricted account
  const [addingPost,setAddingPost]=useState(false);
- const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false);
+ const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false);
  const [delFails,setDelFails]=useState(()=>readDelFails(user.uid));
- const {show:showHint}=useHint();
+ const hint=useHint();const showHint=hint.show;
  const lockedTap=()=>showHint("lockedField");
  const confirm=useConfirm();const toast=useToast();
  const isPremium=!!profile?.premium;
@@ -1406,12 +1477,14 @@ function Dashboard({user}:{user:User}){
    <SettingsMenu onAccount={()=>setAccountOpen(true)} onHelp={()=>setTourOpen(true)} onSignOut={()=>signOut(profileAuth)}/>
   </div>
  </header>
+ {shareOpen&&profile&&<ShareProfileModal profile={profile} onClose={()=>setShareOpen(false)}/>}
  {accountOpen&&<AccountModal user={user} profile={profile} delFails={delFails} busy={deletingProfile} onDelete={deleteProfileOnly} onClose={()=>setAccountOpen(false)}/>}
  {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setProfileOpen(true),showInbox:()=>setInboxOpen(true)})} onClose={()=>setTourOpen(false)}/>}
 
  <div className="spts-dash-actions">
   {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setProfileOpen(o=>!o)}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
   <button type="button" aria-expanded={inboxOpen} onClick={()=>setInboxOpen(o=>!o)}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
+  {profile&&!flagged&&<button type="button" onClick={()=>setShareOpen(true)} {...hint.props("shareOwn")}>Share profile</button>}
  </div>
 
  {flagged&&<section className="spts-card">
