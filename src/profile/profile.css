@@ -2175,3 +2175,11 @@ html.spts-ad-bare body{overflow:hidden;}
 /* QR code (dashboard) */
 .spts-qr-canvas{display:block;width:min(260px,100%);height:auto;margin:0 auto 10px;background:#fff;image-rendering:pixelated;}
 .spts-qr-link{text-align:center;overflow-wrap:anywhere;font-size:.74rem;}
+
+
+/* Portfolio card (dashboard): Upload / Request tabs for Premium */
+.spts-seg{display:flex;margin:0 0 14px;border:1px solid var(--line);border-radius:2px;overflow:hidden;}
+.spts-page .spts-seg button{flex:1;min-height:0;padding:9px 10px;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--muted);font-size:.8rem;}
+.spts-page .spts-seg button:hover{background:rgba(34,211,238,.06);color:var(--white);border:0;box-shadow:none;}
+.spts-page .spts-seg button.on{background:rgba(34,211,238,.1);color:var(--cyan);}
+.spts-portfolio-badge{margin:0 0 8px;}

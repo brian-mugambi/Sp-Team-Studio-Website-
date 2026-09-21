@@ -225,7 +225,7 @@ const HINTS={
  cardPosts:"Posts: photos and videos that show on your public profile.",
  cardInbox:"Inbox: anonymous messages from visitors. Only you can read and reply.",
  cardPortfolio:"Portfolio: an optional page for your work, linked from See portfolio on your profile.",
- cardRequest:"Request: our team builds a portfolio page for you. Included with Premium.",
+ portfolioOwn:"Upload your own portfolio page. Premium members can also request one built for them.",
  usernameOwn:"Your username is the last part of your public link. It can't be changed here; contact support if you need to.",
  lockedField:"This field is locked after setup. Contact support to change it.",
  handlePublic:"A username is unique to one profile and is part of this page's link.",
@@ -1122,7 +1122,7 @@ function Tour({steps,onClose}:{steps:TourStep[];onClose:()=>void}){
 }
 
 // What a new owner is usually unaware of, in the order they meet it. Wording follows the dashboard as it is.
-function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>void;showInbox:()=>void}):TourStep[]{
+function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>void;showInbox:()=>void;showPortfolio:()=>void}):TourStep[]{
  const {profile,premium}=o;
  const steps:TourStep[]=[
   {title:"Welcome to your dashboard",body:<p>A quick tour of where everything is. Skip any time, and reopen it from <b>Settings</b>, then <b>Help?</b>.</p>},
@@ -1149,7 +1149,7 @@ function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>
   {title:"Add posts",body:<p>Posts appear on your public profile. Paste a photo or video link{premium?", or upload a file":" (Premium members can upload files)"}, add an optional caption, then tap <b>Add post</b>. You can keep up to {MAX_POSTS}. Manage or delete posts from your public profile.</p>},
   {title:"Likes and comments",body:<p>Signed-in visitors can like and comment on your posts. Comments can be up to {COMMENT_MAX} characters.</p>},
   {title:"Your inbox",body:<p>Tap <b>Go to inbox</b> to read messages from visitors, up to {MSG_MAX} characters each. They're anonymous: you see a visitor ID, not a name. Reply in the thread, or use <b>Delete visitor</b> to remove someone with all their messages.</p>,action:{label:"Show me",run:o.showInbox}},
-  {title:"Portfolio",body:<p>Upload your own HTML file (under 0.5 MB) in the <b>Portfolio</b> card and pick a duration of at least 1 week. While it's live it can't be removed. Visitors reach it from <b>See portfolio</b> on your profile.{premium?<> As a Premium member you can also tap <b>Request portfolio</b> to have our team build one for you, and let visitors save yours as an HTML file with <b>Settings</b>, then <b>Portfolio download</b>.</>:null}</p>},
+  {title:"Portfolio",body:<p>Tap <b>Manage portfolio</b>, then upload your own HTML file (under 0.5 MB) and pick a duration of at least 1 week. While it's live it can't be removed. Visitors reach it from <b>See portfolio</b> on your profile.{premium?<> As a Premium member you can switch to <b>Request one</b> to have our team build it for you, and let visitors save yours as an HTML file with <b>Settings</b>, then <b>Portfolio download</b>.</>:null}</p>,action:{label:"Show me",run:o.showPortfolio}},
   {title:premium?"Your Premium features":"What Premium adds",body:premium
    ?<p>You have the gold theme on your public profile, direct photo and video uploads for posts, portfolio requests, and the portfolio download switch.</p>
    :<p>Premium gives you a gold theme on your public profile, direct photo and video uploads for posts, portfolio requests (our team builds one for you), and a switch that lets visitors download your portfolio. Find <b>Upgrade to Premium</b> in the Profile card.</p>,
@@ -1570,7 +1570,7 @@ function Dashboard({user}:{user:User}){
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [flagged,setFlagged]=useState(false); // signed-in UID not found in its profile: restricted account
  const [addingPost,setAddingPost]=useState(false);
- const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false),[qrOpen,setQrOpen]=useState(false);
+ const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false),[qrOpen,setQrOpen]=useState(false),[portfolioOpen,setPortfolioOpen]=useState(false);
  const [delFails,setDelFails]=useState(()=>readDelFails(user.uid));
  const hint=useHint();const showHint=hint.show;
  const [dlBusy,setDlBusy]=useState(false);
@@ -1595,6 +1595,9 @@ function Dashboard({user}:{user:User}){
  const fieldLocked=(v:any)=>locked&&!!String(v??"").trim(); // a field that already has a value is locked
  // Profile and inbox stay hidden until asked for — except a brand-new user, who needs the create form.
  useEffect(()=>{if(!loadingProfile&&!profile&&!flagged)setProfileOpen(true);},[loadingProfile,profile,flagged]);
+
+ // Opening the portfolio card brings it into view (it sits below the profile and inbox cards).
+ useEffect(()=>{ if(portfolioOpen)document.getElementById("spts-portfolio-card")?.scrollIntoView({behavior:"smooth",block:"start"}); },[portfolioOpen]);
 
  // Arriving from "Help?" on the owner's public profile (/?tour=1): open the tour once the profile has loaded.
  const wantTour=useRef(typeof location!=="undefined"&&new URLSearchParams(location.search).get("tour")==="1");
@@ -1735,13 +1738,14 @@ function Dashboard({user}:{user:User}){
  {qrOpen&&profile&&<QrModal profile={profile} onClose={()=>setQrOpen(false)}/>}
  {shareOpen&&profile&&<ShareProfileModal profile={profile} onClose={()=>setShareOpen(false)}/>}
  {accountOpen&&<AccountModal user={user} profile={profile} delFails={delFails} busy={deletingProfile} onDelete={deleteProfileOnly} onClose={()=>setAccountOpen(false)}/>}
- {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setProfileOpen(true),showInbox:()=>setInboxOpen(true)})} onClose={()=>setTourOpen(false)}/>}
+ {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setProfileOpen(true),showInbox:()=>setInboxOpen(true),showPortfolio:()=>setPortfolioOpen(true)})} onClose={()=>setTourOpen(false)}/>}
 
  <div className="spts-dash-actions">
   {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setProfileOpen(o=>!o)}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
   <button type="button" aria-expanded={inboxOpen} onClick={()=>setInboxOpen(o=>!o)}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
   {profile&&!flagged&&<button type="button" onClick={()=>setShareOpen(true)} {...hint.props("shareOwn")}>Share profile</button>}
   {profile&&!flagged&&<button type="button" onClick={()=>setQrOpen(true)} {...hint.props("qrOwn")}>QR code</button>}
+  {profile&&!flagged&&<button type="button" aria-expanded={portfolioOpen} onClick={()=>setPortfolioOpen(o=>!o)} {...hint.props("portfolioOwn")}>{portfolioOpen?"Hide portfolio":"Manage portfolio"}</button>}
  </div>
 
  {flagged&&<section className="spts-card">
@@ -1796,7 +1800,7 @@ function Dashboard({user}:{user:User}){
 
  {inboxOpen&&<Messages user={user}/>}
 
- {profile&&<AdRequest user={user} profile={profile}/>}
+ {profile&&!flagged&&portfolioOpen&&<PortfolioCard user={user} profile={profile}/>}
 
  <section className="spts-card">
   <div className="spts-card-head"><h2><Hint quiet k="cardPosts">Posts</Hint></h2><Hint k="postCount" plain className="spts-badge">{posts.length}/{MAX_POSTS}</Hint></div>
@@ -2467,8 +2471,8 @@ function PortfolioUpload({profile}:{profile:any}){
   finally{ setRemoving(false); }
  }
 
- return <section className="spts-card">
-  <div className="spts-card-head"><h2><Hint quiet k="cardRequest">Request a portfolio</Hint></h2>{badge&&phase?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
+ return <div className="spts-portfolio-panel">
+  {badge&&phase?<div className="spts-portfolio-badge"><Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint></div>:null}
   <p className="spts-muted">
    {!ad&&<>Upload an HTML file and choose how long it stays live (1 week or more).</>}
    {phase==="live"&&locked&&ad?.endDate&&<>Your portfolio is live until {prettyDate(ad.endDate)} and can't be removed before then. Uploading again replaces the page and keeps the same dates.</>}
@@ -2493,16 +2497,23 @@ function PortfolioUpload({profile}:{profile:any}){
     {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>View portfolio</a>}
    </div>
   </form>
- </section>;
+ </div>;
 }
 
-/* Dashboard: upload for everyone, plus a request card for Premium. */
-function AdRequest({user,profile}:{user:User;profile:any}){
- // Everyone uploads their own portfolio. Premium members can also ask us to build one for them.
- return <>
-  <PortfolioUpload profile={profile}/>
-  {profile.premium&&<AdRequestCard user={user} profile={profile}/>}
- </>;
+/* Dashboard: one Portfolio card, opened by "Manage portfolio". Everyone can upload their own portfolio;
+ * Premium members can also switch to "Request one" and have our team build it. */
+function PortfolioCard({user,profile}:{user:User;profile:any}){
+ const [mode,setMode]=useState<"upload"|"request">("upload");
+ const premium=!!profile.premium;
+ const showRequest=premium&&mode==="request";
+ return <section className="spts-card" id="spts-portfolio-card">
+  <div className="spts-card-head"><h2><Hint quiet k="cardPortfolio">Portfolio</Hint></h2></div>
+  {premium&&<div className="spts-seg" role="tablist" aria-label="Portfolio options">
+   <button type="button" role="tab" aria-selected={!showRequest} className={!showRequest?"on":""} onClick={()=>setMode("upload")}>Upload my own</button>
+   <button type="button" role="tab" aria-selected={showRequest} className={showRequest?"on":""} onClick={()=>setMode("request")}>Request one</button>
+  </div>}
+  {showRequest?<AdRequestCard user={user} profile={profile}/>:<PortfolioUpload profile={profile}/>}
+ </section>;
 }
 
 const BADGE_HINT:Record<string,HintKey>={live:"adLive",scheduled:"adScheduled",waiting:"adWaiting",expired:"adExpired"};
@@ -2512,11 +2523,11 @@ function AdRequestCard({user,profile}:{user:User;profile:any}){
  const status=useAdStatus(user,profile.username,bump);
  const phase=status?.phase;
  const blocked=phase==="live"||phase==="scheduled";
- const badge=phase==="waiting"?"Waiting":""; // live / scheduled / expired show on the upload card above
+ const badge=phase==="waiting"?"Waiting":""; // live / scheduled / expired show on the Upload tab
  const range=(s?:string,e?:string)=>s&&e?`${prettyDate(s)} – ${prettyDate(e)}`:e?`until ${prettyDate(e)}`:s?`from ${prettyDate(s)}`:"";
 
- return <section className="spts-card">
-  <div className="spts-card-head"><h2><Hint quiet k="cardPortfolio">Portfolio</Hint></h2>{badge&&phase&&BADGE_HINT[phase]?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
+ return <div className="spts-portfolio-panel">
+  {badge&&phase&&BADGE_HINT[phase]?<div className="spts-portfolio-badge"><Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint></div>:null}
   <p className="spts-muted">
    {phase==="live"&&<>Your portfolio is live{status?.endDate?` until ${prettyDate(status.endDate)}`:""}. You can request again once it expires.</>}
    {phase==="scheduled"&&<>Your portfolio is ready and goes live {status?.startDate?`on ${prettyDate(status.startDate)}`:"soon"}.</>}
@@ -2528,9 +2539,9 @@ function AdRequestCard({user,profile}:{user:User;profile:any}){
    <button type="button" disabled={blocked} onClick={()=>setOpen(true)}>Request portfolio</button>
    {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>See portfolio</a>}
   </div>
-  <p className="spts-muted">Included with Premium. You can also upload your own in the Portfolio card above.</p>
+  <p className="spts-muted">Requests are a Premium privilege. Or switch to Upload to use your own file.</p>
   {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setBump(b=>b+1);}}/>}
- </section>;
+ </div>;
 }
 
 // Shown on the public portfolio page when there is no live portfolio.
@@ -2549,7 +2560,7 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
  </>;
  return <>
   <a className="spts-ad-link spts-ad-cta" href={DASHBOARD_PATH}>Add your portfolio</a>
-  <p className="spts-muted">Upload your own HTML file from your dashboard.{profile.premium?" As a Premium member you can also request one.":""}</p>
+  <p className="spts-muted">Tap Manage portfolio on your dashboard to upload your own HTML file.{profile.premium?" As a Premium member you can also request one.":""}</p>
   {profile.premium&&<button type="button" onClick={()=>setOpen(true)}>Request portfolio</button>}
   {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setSent(true);}}/>}
  </>;
