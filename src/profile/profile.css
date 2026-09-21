@@ -2183,3 +2183,15 @@ html.spts-ad-bare body{overflow:hidden;}
 .spts-page .spts-seg button:hover{background:rgba(34,211,238,.06);color:var(--white);border:0;box-shadow:none;}
 .spts-page .spts-seg button.on{background:rgba(34,211,238,.1);color:var(--cyan);}
 .spts-portfolio-badge{margin:0 0 8px;}
+
+
+/* Dashboard overview (shown when no card is open) */
+.spts-overview-h{margin:16px 0 8px;color:#bcaeff;font-size:.68rem;font-weight:400;letter-spacing:.08em;text-transform:uppercase;}
+.spts-overview-list{list-style:none;margin:0;padding:0;display:grid;gap:8px;}
+.spts-overview-item{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:10px 12px;border:1px solid var(--line);border-left:2px solid var(--cyan);border-radius:2px;
+  background:rgba(34,211,238,.03);color:var(--muted);font-size:.84rem;line-height:1.5;
+}
+.spts-overview-item > span{flex:1 1 220px;min-width:0;}
+.spts-page .spts-overview-item button{min-height:0;padding:6px 12px;font-size:.74rem;}

@@ -226,6 +226,8 @@ const HINTS={
  cardInbox:"Inbox: anonymous messages from visitors. Only you can read and reply.",
  cardPortfolio:"Portfolio: an optional page for your work, linked from See portfolio on your profile.",
  portfolioOwn:"Upload your own portfolio page. Premium members can also request one built for them.",
+ postsOwn:"Add photos and videos to your public profile.",
+ cardOverview:"Overview: what is happening on your profile and what to do next. It hides while a card is open.",
  usernameOwn:"Your username is the last part of your public link. It can't be changed here; contact support if you need to.",
  lockedField:"This field is locked after setup. Contact support to change it.",
  handlePublic:"A username is unique to one profile and is part of this page's link.",
@@ -1122,10 +1124,10 @@ function Tour({steps,onClose}:{steps:TourStep[];onClose:()=>void}){
 }
 
 // What a new owner is usually unaware of, in the order they meet it. Wording follows the dashboard as it is.
-function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>void;showInbox:()=>void;showPortfolio:()=>void}):TourStep[]{
+function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>void;showInbox:()=>void;showPortfolio:()=>void;showPosts:()=>void}):TourStep[]{
  const {profile,premium}=o;
  const steps:TourStep[]=[
-  {title:"Welcome to your dashboard",body:<p>A quick tour of where everything is. Skip any time, and reopen it from <b>Settings</b>, then <b>Help?</b>.</p>},
+  {title:"Welcome to your dashboard",body:<p>A quick tour of where everything is. When no card is open, the <b>Overview</b> shows new messages and suggestions. Skip any time, and reopen this tour from <b>Settings</b>, then <b>Help?</b>.</p>},
   profile
    ?{title:"Edit your profile",body:<p>Tap <b>Manage profile</b>, then <b>Edit</b>. After setup you can change your bio and fill any optional field you left empty. Your username, display name and filled fields are locked; use contact support to change those.</p>,action:{label:"Show me",run:o.showProfile}}
    :{title:"Create your profile",body:<p>Fill in a username and display name, then tap <b>Create profile</b>. Your username becomes your public link and can't be changed later.</p>,action:{label:"Show me",run:o.showProfile}},
@@ -1146,7 +1148,7 @@ function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>
  });
  steps.push(
   {title:"Contact buttons",body:<p>The website, email and phone you add show as <b>Website</b>, <b>Email</b> and <b>Phone</b> buttons on your public profile. You can fill any you left empty from <b>Edit</b>.</p>},
-  {title:"Add posts",body:<p>Posts appear on your public profile. Paste a photo or video link{premium?", or upload a file":" (Premium members can upload files)"}, add an optional caption, then tap <b>Add post</b>. You can keep up to {MAX_POSTS}. Manage or delete posts from your public profile.</p>},
+  {title:"Add posts",body:<p>Tap <b>Manage posts</b>. Posts appear on your public profile. Paste a photo or video link{premium?", or upload a file":" (Premium members can upload files)"}, add an optional caption, then tap <b>Add post</b>. You can keep up to {MAX_POSTS}. Manage or delete posts from your public profile.</p>,action:{label:"Show me",run:o.showPosts}},
   {title:"Likes and comments",body:<p>Signed-in visitors can like and comment on your posts. Comments can be up to {COMMENT_MAX} characters.</p>},
   {title:"Your inbox",body:<p>Tap <b>Go to inbox</b> to read messages from visitors, up to {MSG_MAX} characters each. They're anonymous: you see a visitor ID, not a name. Reply in the thread, or use <b>Delete visitor</b> to remove someone with all their messages.</p>,action:{label:"Show me",run:o.showInbox}},
   {title:"Portfolio",body:<p>Tap <b>Manage portfolio</b>, then upload your own HTML file (under 0.5 MB) and pick a duration of at least 1 week. While it's live it can't be removed. Visitors reach it from <b>See portfolio</b> on your profile.{premium?<> As a Premium member you can switch to <b>Request one</b> to have our team build it for you, and let visitors save yours as an HTML file with <b>Settings</b>, then <b>Portfolio download</b>.</>:null}</p>,action:{label:"Show me",run:o.showPortfolio}},
@@ -1462,6 +1464,88 @@ function ShareProfileModal({profile,onClose}:{profile:any;onClose:()=>void}){
  </div>;
 }
 
+// Dashboard overview: shown when no card is open. Notifications say what is happening; suggestions say what to do next.
+// Everything depends on the person: their inbox, portfolio, posts, profile details and plan.
+type OvItem={key:string;text:React.ReactNode;action?:{label:string;run:()=>void};node?:React.ReactNode};
+const plural=(n:number,one:string,many=one+"s")=>`${n} ${n===1?one:many}`;
+function daysLeftInclusive(endIso:string):number{
+ return Math.round((Date.parse(endIso+"T00:00:00Z")-Date.parse(todayLocal()+"T00:00:00Z"))/86400000)+1;
+}
+function joinList(a:string[]):string{ return a.length<=1?a.join(""):a.slice(0,-1).join(", ")+" and "+a[a.length-1]; }
+
+type OverviewProps={user:User;profile:any|null;loadingProfile:boolean;posts:any[];premium:boolean;downloadOn:boolean;
+ onOpenProfile:()=>void;onEditProfile:()=>void;onOpenInbox:()=>void;onOpenPortfolio:()=>void;onOpenPosts:()=>void;onShare:()=>void;onToggleDownload:()=>void};
+
+function DashboardOverview(props:OverviewProps){
+ if(props.loadingProfile)return null;
+ if(!props.profile)return <section className="spts-card spts-overview">
+  <div className="spts-card-head"><h2><Hint quiet k="cardOverview">Overview</Hint></h2></div>
+  <ul className="spts-overview-list"><li className="spts-overview-item"><span>You don't have a public profile yet. Create one to get your own page.</span><button type="button" className="spts-ghost" onClick={props.onOpenProfile}>Create profile</button></li></ul>
+ </section>;
+ return <ProfileOverview {...props} profile={props.profile}/>;
+}
+
+function ProfileOverview({user,profile,posts,premium,downloadOn,onEditProfile,onOpenInbox,onOpenPortfolio,onOpenPosts,onShare,onToggleDownload}:OverviewProps&{profile:any}){
+ const status=useAdStatus(user,profile.username,0);
+ const [inbox,setInbox]=useState<{visitors:number;messages:number}|null|undefined>(undefined);
+ useEffect(()=>onSnapshot(
+  query(collection(profileDb,"conversations"),where("profileOwnerId","==",user.uid)),
+  snap=>{ let m=0; snap.forEach(d=>{ m+=Number(d.data().messageCount)||0; }); setInbox({visitors:snap.size,messages:m}); },
+  ()=>setInbox(null), // no access: just leave the inbox line out
+ ),[user.uid]);
+
+ const notes:OvItem[]=[],tips:OvItem[]=[];
+ const phase=status?.phase;
+
+ // Notifications
+ if(inbox){
+  notes.push(inbox.visitors>0
+   ?{key:"inbox",text:`${plural(inbox.visitors,"visitor")} sent you ${plural(inbox.messages,"message")}.`,action:{label:"Open inbox",run:onOpenInbox}}
+   :{key:"inbox",text:"No visitor messages yet."});
+ }
+ if(status){
+  if(phase==="live"){
+   const left=status.endDate?daysLeftInclusive(status.endDate):null;
+   notes.push({key:"pf",text:left===null?"Your portfolio is live.":left<=1?"Your portfolio is live and expires today.":`Your portfolio is live and expires on ${prettyDate(status.endDate!)} (${left} days left).`,action:{label:"Manage portfolio",run:onOpenPortfolio}});
+  }else if(phase==="scheduled"){
+   notes.push({key:"pf",text:`Your portfolio goes live ${status.startDate?`on ${prettyDate(status.startDate)}`:"soon"}.`,action:{label:"Manage portfolio",run:onOpenPortfolio}});
+  }else if(phase==="waiting"){
+   notes.push({key:"pf",text:"Your portfolio request is being prepared. It goes live once it's ready."});
+  }else if(phase==="expired"){
+   notes.push({key:"pf",text:`Your portfolio expired${status.endDate?` on ${prettyDate(status.endDate)}`:""}.`,action:{label:"Upload again",run:onOpenPortfolio}});
+  }else{
+   tips.push({key:"pf",text:premium?"You don't have a live portfolio. Upload your own page, or request one built for you.":"You don't have a live portfolio. Upload your own page to showcase your work.",action:{label:"Manage portfolio",run:onOpenPortfolio}});
+  }
+  if(premium&&phase==="live"&&!downloadOn)notes.push({key:"dl",text:"Portfolio download is off, so visitors can't save your page.",action:{label:"Turn on",run:onToggleDownload}});
+ }
+ if(posts.length>0)notes.push({key:"posts",text:`${plural(posts.length,"post")} live on your public profile.`,action:{label:"Manage posts",run:onOpenPosts}});
+
+ // Suggestions
+ const missing:string[]=[];
+ if(!profile.bio)missing.push("a bio");
+ if(!profile.photoUrl)missing.push("a photo");
+ if(!profile.websiteUrl)missing.push("a website");
+ if(!profile.email)missing.push("an email");
+ if(!profile.phone)missing.push("a phone number");
+ if(missing.length)tips.unshift({key:"complete",text:`Complete your profile: add ${joinList(missing)}.`,action:{label:"Edit profile",run:onEditProfile}});
+ else if(profile.bio&&detectContacts(profile.bio).urls.length===0)tips.unshift({key:"biolinks",text:"Add your GitHub or project links to your bio. They become tappable for visitors.",action:{label:"Edit profile",run:onEditProfile}});
+ if(posts.length===0)tips.push({key:"post",text:"You haven't added a post yet. Posts give visitors something to see.",action:{label:"Manage posts",run:onOpenPosts}});
+ if(!premium)tips.push({key:"upgrade",text:"Upgrade to Premium for the gold theme, direct file uploads, portfolio download and portfolio requests.",node:<UpgradeButton user={user}/>});
+ tips.push({key:"share",text:"Share your profile in a message, or print your QR code.",action:{label:"Share profile",run:onShare}});
+
+ const render=(it:OvItem)=><li key={it.key} className="spts-overview-item">
+  <span>{it.text}</span>
+  {it.action&&<button type="button" className="spts-ghost" onClick={it.action.run}>{it.action.label}</button>}
+  {it.node}
+ </li>;
+ const shownTips=tips.slice(0,4),shownNotes=notes.slice(0,5);
+ return <section className="spts-card spts-overview">
+  <div className="spts-card-head"><h2><Hint quiet k="cardOverview">Overview</Hint></h2></div>
+  {shownNotes.length>0&&<><h3 className="spts-overview-h">Notifications</h3><ul className="spts-overview-list">{shownNotes.map(render)}</ul></>}
+  {shownTips.length>0&&<><h3 className="spts-overview-h">Suggestions</h3><ul className="spts-overview-list">{shownTips.map(render)}</ul></>}
+ </section>;
+}
+
 // Settings dropdown on the dashboard: Account, Help?, Sign out.
 function SettingsMenu({onAccount,onHelp,onSignOut,download}:{onAccount:()=>void;onHelp:()=>void;onSignOut:()=>void;download?:{on:boolean;busy:boolean;onToggle:()=>void}}){
  const [open,setOpen]=useState(false);
@@ -1570,7 +1654,7 @@ function Dashboard({user}:{user:User}){
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [flagged,setFlagged]=useState(false); // signed-in UID not found in its profile: restricted account
  const [addingPost,setAddingPost]=useState(false);
- const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false),[qrOpen,setQrOpen]=useState(false),[portfolioOpen,setPortfolioOpen]=useState(false);
+ const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false),[qrOpen,setQrOpen]=useState(false),[portfolioOpen,setPortfolioOpen]=useState(false),[postsCardOpen,setPostsCardOpen]=useState(false);
  const [delFails,setDelFails]=useState(()=>readDelFails(user.uid));
  const hint=useHint();const showHint=hint.show;
  const [dlBusy,setDlBusy]=useState(false);
@@ -1598,6 +1682,7 @@ function Dashboard({user}:{user:User}){
 
  // Opening the portfolio card brings it into view (it sits below the profile and inbox cards).
  useEffect(()=>{ if(portfolioOpen)document.getElementById("spts-portfolio-card")?.scrollIntoView({behavior:"smooth",block:"start"}); },[portfolioOpen]);
+ useEffect(()=>{ if(postsCardOpen)document.getElementById("spts-posts-card")?.scrollIntoView({behavior:"smooth",block:"start"}); },[postsCardOpen]);
 
  // Arriving from "Help?" on the owner's public profile (/?tour=1): open the tour once the profile has loaded.
  const wantTour=useRef(typeof location!=="undefined"&&new URLSearchParams(location.search).get("tour")==="1");
@@ -1738,7 +1823,7 @@ function Dashboard({user}:{user:User}){
  {qrOpen&&profile&&<QrModal profile={profile} onClose={()=>setQrOpen(false)}/>}
  {shareOpen&&profile&&<ShareProfileModal profile={profile} onClose={()=>setShareOpen(false)}/>}
  {accountOpen&&<AccountModal user={user} profile={profile} delFails={delFails} busy={deletingProfile} onDelete={deleteProfileOnly} onClose={()=>setAccountOpen(false)}/>}
- {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setProfileOpen(true),showInbox:()=>setInboxOpen(true),showPortfolio:()=>setPortfolioOpen(true)})} onClose={()=>setTourOpen(false)}/>}
+ {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setProfileOpen(true),showInbox:()=>setInboxOpen(true),showPortfolio:()=>setPortfolioOpen(true),showPosts:()=>setPostsCardOpen(true)})} onClose={()=>setTourOpen(false)}/>}
 
  <div className="spts-dash-actions">
   {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setProfileOpen(o=>!o)}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
@@ -1746,6 +1831,7 @@ function Dashboard({user}:{user:User}){
   {profile&&!flagged&&<button type="button" onClick={()=>setShareOpen(true)} {...hint.props("shareOwn")}>Share profile</button>}
   {profile&&!flagged&&<button type="button" onClick={()=>setQrOpen(true)} {...hint.props("qrOwn")}>QR code</button>}
   {profile&&!flagged&&<button type="button" aria-expanded={portfolioOpen} onClick={()=>setPortfolioOpen(o=>!o)} {...hint.props("portfolioOwn")}>{portfolioOpen?"Hide portfolio":"Manage portfolio"}</button>}
+  {profile&&!flagged&&<button type="button" aria-expanded={postsCardOpen} onClick={()=>setPostsCardOpen(o=>!o)} {...hint.props("postsOwn")}>{postsCardOpen?"Hide posts":"Manage posts"}</button>}
  </div>
 
  {flagged&&<section className="spts-card">
@@ -1802,7 +1888,7 @@ function Dashboard({user}:{user:User}){
 
  {profile&&!flagged&&portfolioOpen&&<PortfolioCard user={user} profile={profile}/>}
 
- <section className="spts-card">
+ {postsCardOpen&&profile&&!flagged&&<section className="spts-card" id="spts-posts-card">
   <div className="spts-card-head"><h2><Hint quiet k="cardPosts">Posts</Hint></h2><Hint k="postCount" plain className="spts-badge">{posts.length}/{MAX_POSTS}</Hint></div>
   <p className="spts-muted">{isPremium?"Paste a URL, or upload a file directly.":"URLs only — no uploads. Upgrade to Premium to upload files directly."}</p>
   <AutoDeleteNotice text="Posts, with their likes and comments, are removed 24h after you add them."/>
@@ -1820,7 +1906,11 @@ function Dashboard({user}:{user:User}){
    <p className="spts-muted spts-dashboard-post-hint">Showing your latest post. Manage or delete posts from your public profile, which you own.</p>
    {profile&&<a className="spts-see-more" href={`/profile/${profile.username}`}>See all posts on your public profile <Ico d={ICON.next}/></a>}
   </>}
- </section>
+ </section>}
+
+ {/* Nothing open: show what is new and what to do next. It hides as soon as a card is opened. */}
+ {!flagged&&!profileOpen&&!inboxOpen&&!portfolioOpen&&!postsCardOpen&&<DashboardOverview user={user} profile={profile} loadingProfile={loadingProfile} posts={posts} premium={isPremium} downloadOn={downloadOn}
+  onOpenProfile={()=>setProfileOpen(true)} onEditProfile={()=>{setProfileOpen(true);setEditing(true);}} onOpenInbox={()=>setInboxOpen(true)} onOpenPortfolio={()=>setPortfolioOpen(true)} onOpenPosts={()=>setPostsCardOpen(true)} onShare={()=>setShareOpen(true)} onToggleDownload={toggleDownload}/>}
 
  {err&&<p className="spts-error"><ErrText text={err}/></p>}</main>
 }
