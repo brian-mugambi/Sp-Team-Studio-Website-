@@ -209,12 +209,12 @@ const HINTS={
  email:"Opens your email app to write to the owner.",
  phone:"Calls the owner if your device supports calling.",
  contactNote:"Links, emails and phone numbers in the bio are made tappable.",
- premium:"Premium: gold profile theme, direct file uploads, and your own portfolio page that you upload yourself.",
+ premium:"Premium: gold profile theme, direct file uploads, portfolio download, and requesting a portfolio built for you.",
  live:"Your public profile is live and visible to anyone with your link.",
  like:"Likes are removed 24 hours after they're added, from the device that added them.",
  postCount:`Posts used out of the ${MAX_POSTS} allowed.`,
  inboxCount:"Conversations with visitors. Each visitor is one conversation.",
- upgrade:"Opens Paystack to pay for Premium, which unlocks the gold theme, file uploads and uploading your own portfolio.",
+ upgrade:"Opens Paystack to pay for Premium, which unlocks the gold theme, file uploads, portfolio download and portfolio requests.",
  adLive:"Your portfolio page is visible to the public.",
  adScheduled:"Your portfolio is ready and goes live on its start date.",
  adWaiting:"Request received. We're preparing your portfolio.",
@@ -225,6 +225,7 @@ const HINTS={
  cardPosts:"Posts: photos and videos that show on your public profile.",
  cardInbox:"Inbox: anonymous messages from visitors. Only you can read and reply.",
  cardPortfolio:"Portfolio: an optional page for your work, linked from See portfolio on your profile.",
+ cardRequest:"Request: our team builds a portfolio page for you. Included with Premium.",
  usernameOwn:"Your username is the last part of your public link. It can't be changed here; contact support if you need to.",
  lockedField:"This field is locked after setup. Contact support to change it.",
  handlePublic:"A username is unique to one profile and is part of this page's link.",
@@ -1148,12 +1149,10 @@ function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>
   {title:"Add posts",body:<p>Posts appear on your public profile. Paste a photo or video link{premium?", or upload a file":" (Premium members can upload files)"}, add an optional caption, then tap <b>Add post</b>. You can keep up to {MAX_POSTS}. Manage or delete posts from your public profile.</p>},
   {title:"Likes and comments",body:<p>Signed-in visitors can like and comment on your posts. Comments can be up to {COMMENT_MAX} characters.</p>},
   {title:"Your inbox",body:<p>Tap <b>Go to inbox</b> to read messages from visitors, up to {MSG_MAX} characters each. They're anonymous: you see a visitor ID, not a name. Reply in the thread, or use <b>Delete visitor</b> to remove someone with all their messages.</p>,action:{label:"Show me",run:o.showInbox}},
-  {title:"Portfolio",body:premium
-   ?<p>Upload your own HTML file (under 0.5 MB) in the <b>Portfolio</b> card and pick a duration of at least 1 week. While it's live it can't be removed. Visitors reach it from <b>See portfolio</b> on your profile, and you can let them save it as an HTML file with <b>Settings</b>, then <b>Portfolio download</b>.</p>
-   :<p>In the <b>Portfolio</b> card, tap <b>Request portfolio</b>, say what it should show, and pick a duration and start date. We build it and it goes live for that time. Visitors reach it from <b>See portfolio</b> on your profile.</p>},
+  {title:"Portfolio",body:<p>Upload your own HTML file (under 0.5 MB) in the <b>Portfolio</b> card and pick a duration of at least 1 week. While it's live it can't be removed. Visitors reach it from <b>See portfolio</b> on your profile.{premium?<> As a Premium member you can also tap <b>Request portfolio</b> to have our team build one for you, and let visitors save yours as an HTML file with <b>Settings</b>, then <b>Portfolio download</b>.</>:null}</p>},
   {title:premium?"Your Premium features":"What Premium adds",body:premium
-   ?<p>You have the gold theme on your public profile, direct photo and video uploads for posts, and your own portfolio upload.</p>
-   :<p>Premium gives you a gold theme on your public profile, direct photo and video uploads for posts, and uploading your own portfolio instead of requesting one. Find <b>Upgrade to Premium</b> in the Profile card.</p>,
+   ?<p>You have the gold theme on your public profile, direct photo and video uploads for posts, portfolio requests, and the portfolio download switch.</p>
+   :<p>Premium gives you a gold theme on your public profile, direct photo and video uploads for posts, portfolio requests (our team builds one for you), and a switch that lets visitors download your portfolio. Find <b>Upgrade to Premium</b> in the Profile card.</p>,
    ...(premium?{}:{action:{label:"Show me",run:o.showProfile}})},
   {title:"Auto delete",body:<p>Posts, comments, likes, messages and replies are removed 24 hours after they're created. It runs from the device that created them, so that device needs to be online with its browser data kept. Tap or hover any dotted word for a quick explanation.</p>},
   {title:"Settings",body:<p>Top right, <b>Settings</b> holds <b>Account</b> (where you can delete your profile, or be sent to support to do it), <b>Help?</b> (reopens this tour) and <b>Sign out</b>.</p>},
@@ -2102,7 +2101,7 @@ function UpgradeSuccess({user}:{user:User|null}){
   {status==="working"&&<><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Confirming your payment…</p></>}
   {status==="done"&&<>
    <h2>You're Premium</h2>
-   <p className="spts-muted">Your premium public-profile theme, direct file uploads and portfolio upload are unlocked.</p>
+   <p className="spts-muted">Your premium public-profile theme, direct file uploads, portfolio download and portfolio requests are unlocked.</p>
    <a className="spts-ghost spts-link-btn" href={DASHBOARD_PATH}>Back to dashboard</a>
   </>}
   {status==="error"&&errKind==="flagged"&&<>
@@ -2125,16 +2124,16 @@ function UpgradeSuccess({user}:{user:User|null}){
  *
  * Firestore layout:
  *   profiles/{username}/ad/code          -> { html, startDate?, endDate? }
- *        Basic profiles: added by hand in the Firestore console after the
- *        owner sends a request. Premium profiles: the owner uploads their
- *        own .html file from the dashboard (PortfolioUpload), choosing a
- *        duration of at least 1 week; that writes { html, startDate, endDate }
- *        to this same doc, and Remove stays disabled while it is live. startDate / endDate are OPTIONAL
+ *        Every profile owner (basic or Premium) uploads their own .html file
+ *        from the dashboard (PortfolioUpload), choosing a duration of at least
+ *        1 week; that writes { html, startDate, endDate } to this doc, and
+ *        Remove stays disabled while it is live. Premium owners can also
+ *        request one: it is added by hand in the Firestore console after the
+ *        request arrives. startDate / endDate are OPTIONAL
  *        "YYYY-MM-DD" strings (endDate is the last day the portfolio shows).
- *        Outside that window it counts as not live, so it "expires" and a
- *        basic owner can request again. Public read. Client writes: the
- *        Premium owner of the profile only (see the rules note in the
- *        hand-off), never anyone else.
+ *        Outside that window it counts as not live, so it "expires" and the
+ *        owner can upload again. Public read. Client writes: the profile's
+ *        own owner only.
  *   adrequest/{ownerUid}/messages/{id}   -> the owner's request
  *        { ownerId, username, fullName, mobile, message, durationDays,
  *          liveDate, endDate, status:"pending", createdAt }
@@ -2332,6 +2331,7 @@ function AdRequestModal({user,profile,onClose,onSent}:{user:User;profile:any;onC
 
  async function submit(e:React.FormEvent){
   e.preventDefault();
+  if(!profile.premium)return setErr("Requesting a portfolio is for Premium members. You can upload your own from the dashboard.");
   if(!name.trim())return setErr("Full name is required.");
   if(mobile.replace(/\D/g,"").length<7)return setErr("Enter a valid mobile number.");
   if(desc.trim().length<AD_MIN_DESC)return setErr(`Describe the portfolio in at least ${AD_MIN_DESC} characters.`);
@@ -2468,9 +2468,9 @@ function PortfolioUpload({profile}:{profile:any}){
  }
 
  return <section className="spts-card">
-  <div className="spts-card-head"><h2><Hint quiet k="cardPortfolio">Portfolio</Hint></h2>{badge&&phase?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
+  <div className="spts-card-head"><h2><Hint quiet k="cardRequest">Request a portfolio</Hint></h2>{badge&&phase?<Hint k={BADGE_HINT[phase]} plain className="spts-badge">{badge}</Hint>:null}</div>
   <p className="spts-muted">
-   {!ad&&<>Upload an HTML file and choose how long it stays live (1 week or more). No request needed.</>}
+   {!ad&&<>Upload an HTML file and choose how long it stays live (1 week or more).</>}
    {phase==="live"&&locked&&ad?.endDate&&<>Your portfolio is live until {prettyDate(ad.endDate)} and can't be removed before then. Uploading again replaces the page and keeps the same dates.</>}
    {phase==="live"&&!locked&&<>Your portfolio is live. Uploading again replaces it.</>}
    {phase==="scheduled"&&<>Your portfolio goes live {ad?.startDate?`on ${prettyDate(ad.startDate)}`:"soon"}. Uploading again replaces it and publishes right away.</>}
@@ -2496,9 +2496,13 @@ function PortfolioUpload({profile}:{profile:any}){
  </section>;
 }
 
-/* Dashboard card. Basic profiles request a portfolio; Premium profiles upload their own. */
+/* Dashboard: upload for everyone, plus a request card for Premium. */
 function AdRequest({user,profile}:{user:User;profile:any}){
- return profile.premium?<PortfolioUpload profile={profile}/>:<AdRequestCard user={user} profile={profile}/>;
+ // Everyone uploads their own portfolio. Premium members can also ask us to build one for them.
+ return <>
+  <PortfolioUpload profile={profile}/>
+  {profile.premium&&<AdRequestCard user={user} profile={profile}/>}
+ </>;
 }
 
 const BADGE_HINT:Record<string,HintKey>={live:"adLive",scheduled:"adScheduled",waiting:"adWaiting",expired:"adExpired"};
@@ -2508,7 +2512,7 @@ function AdRequestCard({user,profile}:{user:User;profile:any}){
  const status=useAdStatus(user,profile.username,bump);
  const phase=status?.phase;
  const blocked=phase==="live"||phase==="scheduled";
- const badge=phase==="live"?"Live":phase==="scheduled"?"Scheduled":phase==="waiting"?"Waiting":phase==="expired"?"Expired":"";
+ const badge=phase==="waiting"?"Waiting":""; // live / scheduled / expired show on the upload card above
  const range=(s?:string,e?:string)=>s&&e?`${prettyDate(s)} – ${prettyDate(e)}`:e?`until ${prettyDate(e)}`:s?`from ${prettyDate(s)}`:"";
 
  return <section className="spts-card">
@@ -2518,13 +2522,13 @@ function AdRequestCard({user,profile}:{user:User;profile:any}){
    {phase==="scheduled"&&<>Your portfolio is ready and goes live {status?.startDate?`on ${prettyDate(status.startDate)}`:"soon"}.</>}
    {phase==="waiting"&&<>Request sent for {range(status?.startDate,status?.endDate)}. We're preparing your portfolio — it goes live once it's ready. You can send another request if something changed.</>}
    {phase==="expired"&&<>Your last portfolio expired{status?.endDate?` on ${prettyDate(status.endDate)}`:""}. Request another run any time.</>}
-   {(phase==="none"||!phase)&&<>Get a portfolio at <a href={`/profile/${profile.username}/ad`}>/profile/{profile.username}/ad</a>.</>}
+   {(phase==="none"||!phase)&&<>Want us to build it for you? Tap Request portfolio and say what it should show. It will appear at <a href={`/profile/${profile.username}/ad`}>/profile/{profile.username}/ad</a>.</>}
   </p>
   <div className="spts-ad-actions">
    <button type="button" disabled={blocked} onClick={()=>setOpen(true)}>Request portfolio</button>
    {phase==="live"&&<a className="spts-ad-link spts-ghost" href={`/profile/${profile.username}/ad`}>See portfolio</a>}
   </div>
-  <p className="spts-muted">Premium members upload their own portfolio.</p>
+  <p className="spts-muted">Included with Premium. You can also upload your own in the Portfolio card above.</p>
   {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setBump(b=>b+1);}}/>}
  </section>;
 }
@@ -2534,21 +2538,19 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
  const {loading,profile}=useOwnProfile(user);
  const [open,setOpen]=useState(false),[sent,setSent]=useState(false);
  if(sent)return <p className="spts-muted">Request sent — we'll be in touch soon.</p>;
- if(authLoading||(user&&loading))return <button type="button" disabled>Request portfolio</button>;
+ if(authLoading||(user&&loading))return <button type="button" disabled>Add your portfolio</button>;
  if(!user)return <>
-  <a className="spts-ad-link spts-ad-cta" href="/profiles">Request portfolio</a>
-  <p className="spts-muted">Create a profile first, then request your portfolio.</p>
+  <a className="spts-ad-link spts-ad-cta" href="/profiles">Add your portfolio</a>
+  <p className="spts-muted">Create a profile first, then upload your own portfolio.</p>
  </>;
  if(!profile)return <>
   <a className="spts-ad-link spts-ad-cta" href="/profiles">Create your profile</a>
   <p className="spts-muted">You need a profile first.</p>
  </>;
- if(profile.premium)return <>
-  <a className="spts-ad-link spts-ad-cta" href={DASHBOARD_PATH}>Add your portfolio</a>
-  <p className="spts-muted">Premium: upload your own HTML file from your dashboard.</p>
- </>;
  return <>
-  <button type="button" onClick={()=>setOpen(true)}>Request portfolio</button>
+  <a className="spts-ad-link spts-ad-cta" href={DASHBOARD_PATH}>Add your portfolio</a>
+  <p className="spts-muted">Upload your own HTML file from your dashboard.{profile.premium?" As a Premium member you can also request one.":""}</p>
+  {profile.premium&&<button type="button" onClick={()=>setOpen(true)}>Request portfolio</button>}
   {open&&<AdRequestModal user={user} profile={profile} onClose={()=>setOpen(false)} onSent={()=>{setOpen(false);setSent(true);}}/>}
  </>;
 }
