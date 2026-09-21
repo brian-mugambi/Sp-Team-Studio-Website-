@@ -157,6 +157,7 @@ const ICON={
  back:"M19 12H5M12 19l-7-7 7-7",
  next:"M5 12h14M12 5l7 7-7 7",
  caret:"M6 9l6 6 6-6",
+ share:"M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13",
 };
 
 type Toast = { id: number; kind: "success"|"error"|"info"; text: string; action?: {label:string;href:string}; key?: string };
@@ -640,11 +641,69 @@ async function runTTLSweep(){
 }
 
 /* ------------------------------------------------------------------ *
+ * Legal — Terms of Service and Privacy Notice, shown from the sign-up form.
+ * Firestore: legal/resources  { terms: string, policies: string }
+ * Any line that starts with a number (1. / 1.1 / 2) ) is a heading or sub-heading and shows bold.
+ * The sign-up page is used signed out, so the rules must let anyone read (never write) this one document.
+ * ------------------------------------------------------------------ */
+type LegalKind="terms"|"policies";
+const LEGAL_TITLES:Record<LegalKind,string>={terms:"Terms of Service",policies:"Privacy Notice"};
+const LEGAL_NUMBERED=/^\d+(?:\.\d+)*[.)]?(?:\s|$)/;
+let legalCache:{terms:string;policies:string}|null=null; // loaded once per visit
+async function loadLegal():Promise<{terms:string;policies:string}>{
+ if(legalCache)return legalCache;
+ const s=await getDoc(doc(profileDb,"legal","resources"));
+ const d:any=s.exists()?s.data():{};
+ const out={terms:typeof d.terms==="string"?d.terms:"",policies:typeof d.policies==="string"?d.policies:""};
+ if(s.exists())legalCache=out;
+ return out;
+}
+function LegalText({text}:{text:string}){
+ const lines=text.replace(/\\n/g,"\n").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+ return <>{lines.map((l,i)=>LEGAL_NUMBERED.test(l)
+  ?<p key={i} className="spts-legal-h"><b>{l}</b></p>
+  :<p key={i}>{l}</p>)}</>;
+}
+function LegalModal({kind,onClose}:{kind:LegalKind;onClose:()=>void}){
+ const [text,setText]=useState<string|null>(null),[err,setErr]=useState(""),[tries,setTries]=useState(0);
+ useEffect(()=>{
+  let live=true;setText(null);setErr("");
+  loadLegal().then(d=>{ if(live)setText(d[kind]); },e=>{ if(live)setErr(accessText(e,"Couldn't load this. Try again.")); });
+  return ()=>{live=false;};
+ },[kind,tries]);
+ useEffect(()=>{
+  const onKey=(e:KeyboardEvent)=>{ if(e.key==="Escape")onClose(); };
+  window.addEventListener("keydown",onKey);
+  return ()=>window.removeEventListener("keydown",onKey);
+ },[onClose]);
+ const ready=text!==null&&text.trim()!=="";
+ return <div className="spts-modal-backdrop" role="dialog" aria-modal="true" aria-label={LEGAL_TITLES[kind]} onClick={onClose}>
+  <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
+   <h3 className="spts-modal-title">{LEGAL_TITLES[kind]}</h3>
+   <div className="spts-modal-body spts-legal-body">
+    {err?<p className="spts-legal-err"><ErrText text={err}/></p>
+     :text===null?<p className="spts-muted">Loading…</p>
+     :ready?<LegalText text={text as string}/>
+     :<p className="spts-muted">This isn't available right now. Please try again later.</p>}
+   </div>
+   <div className="spts-modal-actions">
+    {ready
+     ?<button type="button" autoFocus onClick={onClose}>Agree</button>
+     :<>
+      {(err||text!==null)&&<button type="button" onClick={()=>setTries(n=>n+1)}>Try again</button>}
+      <button type="button" className="spts-ghost" onClick={onClose}>Close</button>
+     </>}
+   </div>
+  </div>
+ </div>;
+}
+
+/* ------------------------------------------------------------------ *
  * Auth
  * ------------------------------------------------------------------ */
 function Auth({done}:{done:()=>void}){
  const [signup,setSignup]=useState(true),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[err,setErr]=useState(""),[busy,setBusy]=useState(false);
- const [resetting,setResetting]=useState(false);
+ const [resetting,setResetting]=useState(false),[legal,setLegal]=useState<LegalKind|null>(null);
  const toast=useToast();
  // Firebase emails a reset link. The message is the same whether or not the address has an account.
  async function reset(){
@@ -669,9 +728,11 @@ function Auth({done}:{done:()=>void}){
  <label>Email<input type="email" required placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/></label>
  <label>Password<input type="password" required minLength={6} placeholder="At least 6 characters" value={password} onChange={e=>setPassword(e.target.value)} disabled={busy}/></label>
  <SpinnerButton type="submit" busy={busy} busyLabel={signup?"Creating…":"Logging in…"}>{signup?"Sign up":"Log in"}</SpinnerButton>
+ {signup&&<p className="spts-legal-note">By creating an account, you agree to our <button type="button" className="spts-legal-link" onClick={()=>setLegal("terms")}>Terms of Service</button> and <button type="button" className="spts-legal-link" onClick={()=>setLegal("policies")}>Privacy Notice</button>.</p>}
  </form>{err&&<p className="spts-error"><ErrText text={err}/></p>}
  {!signup&&<p><button type="button" className="spts-link" onClick={reset} disabled={busy||resetting}>{resetting?"Sending link…":"Reset password"}</button></p>}
- <button className="spts-link" onClick={()=>setSignup(!signup)} disabled={busy||resetting}>{signup?"Already registered? Log in":"Create an account"}</button></section>
+ <button className="spts-link" onClick={()=>setSignup(!signup)} disabled={busy||resetting}>{signup?"Already registered? Log in":"Create an account"}</button>
+ {legal&&<LegalModal kind={legal} onClose={()=>setLegal(null)}/>}</section>
 }
 
 /* ------------------------------------------------------------------ *
@@ -1982,6 +2043,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  if(!p)return <main className="spts-public"><div className="spts-public-status"><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Loading profile…</p></div></main>;
  const contacts=detectContacts(p.bio||"");
  const canDeletePosts=!!user&&user.uid===p.uid;
+ const isOwner=canDeletePosts; // the signed-in owner viewing their own public page
  const visiblePosts=showAllPosts?posts:posts.slice(0,POST_PREVIEW_COUNT);
  const hiddenPostCount=posts.length-visiblePosts.length;
  function shareProfile(){
@@ -2015,9 +2077,10 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
    {!postsOpen&&<button type="button" aria-expanded={msgOpen} onClick={()=>setMsgOpen(o=>!o)} {...hint.props("message")}>{msgOpen?"Hide message":"Message"}</button>}
    {!postsOpen&&!msgOpen&&<a className="spts-link-btn spts-ad-btn" href={`/profile/${p.username}/ad`} {...hint.props("portfolio")}>See portfolio</a>}
   </div>
-  {!postsOpen&&!msgOpen&&<div className="spts-profile-hero-actions spts-hero-actions-2">
-   <button type="button" className="spts-ghost" onClick={shareProfile} {...hint.props("share")}>{copied?<><Ico d={ICON.check}/> Link copied</>:"Share profile"}</button>
-   <a className="spts-ghost spts-link-btn" href="/profiles" {...hint.props("getOwn")}>Get your own profile</a>
+  {/* Visitor buttons. Owner (signed in): none. Signed in, not the owner: Share profile only. Not signed in: both. */}
+  {!postsOpen&&!msgOpen&&!isOwner&&<div className="spts-hero-cta">
+   <button type="button" className="spts-cta spts-cta-secondary" onClick={shareProfile} {...hint.props("share")}>{copied?<><Ico d={ICON.check}/> Link copied</>:<><Ico d={ICON.share}/> Share profile</>}</button>
+   {!user&&<a className="spts-cta spts-cta-primary" href="/profiles" {...hint.props("getOwn")}>Get your own profile <Ico d={ICON.next}/></a>}
   </div>}
   <small className="spts-muted spts-contact-note"><Hint k="contactNote">{contacts.urls.length+contacts.emails.length+contacts.phones.length} contact/link items detected in bio</Hint></small>
  </section>

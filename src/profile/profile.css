@@ -879,7 +879,7 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
 }
 
 .spts-profile-hero::before {
-  content: '> public.profile';
+  content: '> profile.network';
   position: absolute;
   top: 0;
   left: 0;
@@ -2195,3 +2195,154 @@ html.spts-ad-bare body{overflow:hidden;}
 }
 .spts-overview-item > span{flex:1 1 220px;min-width:0;}
 .spts-page .spts-overview-item button{min-height:0;padding:6px 12px;font-size:.74rem;}
+
+/* Sign-up: Terms of Service / Privacy Notice note and reader (Firestore legal/resources). */
+.spts-legal-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.6;
+}
+
+.spts-page .spts-legal-note .spts-legal-link {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--cyan);
+  font: inherit;
+  letter-spacing: normal;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.spts-page .spts-legal-note .spts-legal-link:hover {
+  background: none;
+  box-shadow: none;
+  color: var(--white);
+}
+
+.spts-legal-body {
+  align-content: start;
+  gap: 10px;
+  max-height: calc(100vh - 220px);
+  max-height: calc(100dvh - 220px);
+  overflow-y: auto;
+  padding-right: 6px;
+  overflow-wrap: anywhere;
+}
+
+.spts-legal-body p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.spts-legal-body .spts-legal-h {
+  margin-top: 8px;
+}
+
+.spts-legal-body .spts-legal-err {
+  color: #ff6b81;
+  font-size: .82rem;
+}
+
+/* Public profile: Share profile / Get your own profile. Clearly tappable buttons for visitors
+   (the owner sees none; a signed-in visitor sees Share only; a signed-out visitor sees both). */
+.spts-public .spts-hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.spts-public .spts-hero-cta .spts-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 18px;
+  border: 1px solid var(--cyan);
+  border-radius: 999px;
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.spts-public .spts-hero-cta .spts-cta .spts-ico {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.spts-public .spts-hero-cta .spts-cta-secondary {
+  background: rgba(34,211,238,.08);
+  color: var(--cyan);
+}
+
+.spts-public .spts-hero-cta .spts-cta-secondary:hover {
+  background: rgba(34,211,238,.16);
+  color: var(--white);
+}
+
+.spts-public .spts-hero-cta a.spts-cta.spts-cta-primary {
+  background: var(--cyan);
+  color: #06060f;
+}
+
+.spts-public .spts-hero-cta a.spts-cta.spts-cta-primary:hover {
+  background: var(--white);
+  border-color: var(--white);
+  color: #06060f;
+}
+
+.spts-public .spts-hero-cta .spts-cta:active {
+  transform: translateY(1px);
+}
+
+.spts-public .spts-hero-cta .spts-cta:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
+}
+
+/* Premium profiles keep the gold theme. */
+.spts-public.spts-premium .spts-hero-cta .spts-cta {
+  border-color: #ffc55c;
+}
+
+.spts-public.spts-premium .spts-hero-cta .spts-cta-secondary {
+  background: rgba(255,197,92,.08);
+  color: #ffc55c;
+}
+
+.spts-public.spts-premium .spts-hero-cta .spts-cta-secondary:hover {
+  background: rgba(255,197,92,.16);
+  color: #ffc55c;
+}
+
+.spts-public.spts-premium .spts-hero-cta a.spts-cta.spts-cta-primary {
+  background: linear-gradient(120deg,#ffc55c,#ff8a3d);
+  border-color: transparent;
+  color: #241300;
+}
+
+.spts-public.spts-premium .spts-hero-cta a.spts-cta.spts-cta-primary:hover {
+  background: linear-gradient(120deg,#ffd27f,#ff9a58);
+  color: #241300;
+}
+
+@media (max-width: 560px) {
+  .spts-public .spts-hero-cta .spts-cta {
+    flex: 1 1 100%;
+  }
+}
