@@ -2719,6 +2719,12 @@ function AdRequestCta({user,authLoading}:{user:User|null;authLoading:boolean}){
  </>;
 }
 
+// Portfolio "Full screen" is remembered for the browser session: it survives a refresh and stays on until the
+// viewer taps the X (or presses Esc). It ends when the tab is closed.
+const BARE_KEY="spts_portfolio_fullscreen_v1";
+function readBare():boolean{ try{ return sessionStorage.getItem(BARE_KEY)==="1"; }catch{ return false; } }
+function writeBare(on:boolean){ try{ if(on)sessionStorage.setItem(BARE_KEY,"1"); else sessionStorage.removeItem(BARE_KEY); }catch{} }
+
 // Public portfolio page (route + Firestore names still say "ad"). Runs the html string in a sandboxed iframe
 // (no allow-same-origin), so the code can't reach this app's auth session, storage or DOM. Same for every profile.
 // Premium portfolios can also offer a Download button (the owner switches it on in Settings).
@@ -2730,7 +2736,8 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  const [dlOk,setDlOk]=useState<boolean|null>(()=>typeof window!=="undefined"?readDlCache(uname):null);
  const [settled,setSettled]=useState(false),[failed,setFailed]=useState(false),[failedText,setFailedText]=useState(ACCESS_GENERIC),[tries,setTries]=useState(0);
  const [copied,setCopied]=useState(false);
- const [bare,setBare]=useState(false); // "full screen": hides the bar and frame; the portfolio fills the window
+ const [bare,setBareState]=useState(()=>typeof window!=="undefined"&&readBare()); // "full screen": hides the bar and frame; the portfolio fills the window
+ const setBare=(on:boolean)=>{ setBareState(on);writeBare(on); };
  const toast=useToast();
  async function copyLink(){
   try{
@@ -2757,7 +2764,7 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  },[uname,tries]);
 
  const live=!!ad&&adPhase(ad,todayLocal())==="live";
- const bareOn=bare&&live;
+ const bareOn=bare&&(live||!settled); // stays on while loading after a refresh, so the bar never flashes
  // Not the browser's Fullscreen API: this only hides the page's own frames. A floating X (or Esc) brings them back.
  useEffect(()=>{
   if(!bareOn)return;
