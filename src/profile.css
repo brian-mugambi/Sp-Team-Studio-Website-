@@ -1,0 +1,2348 @@
+/* ------------------------------------------------------------------ *
+ * Base page + cards
+ * ------------------------------------------------------------------ */
+.spts-page,.spts-public{max-width:900px;margin:auto;padding:32px 18px;color:var(--ink);}
+.spts-card{border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0;background:rgba(255,255,255,0.02);}
+.spts-card-head{display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:10px;}
+.spts-card h2{color:var(--white);font-size:1.05rem;letter-spacing:0.02em;}
+.spts-badge{background:var(--faintest);color:var(--cyan);font-size:0.7rem;padding:2px 10px;border-radius:999px;letter-spacing:0.03em;}
+.spts-card form{display:grid;gap:14px;margin-top:6px;}
+.spts-card label{display:grid;gap:6px;font-size:0.75rem;color:var(--muted);letter-spacing:0.02em;}
+.spts-card input,.spts-card textarea{padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--bg);color:var(--white);}
+.spts-card input:focus,.spts-card textarea:focus{outline:none;border-color:var(--cyan);}
+.spts-card textarea{min-height:100px;resize:vertical;}
+.spts-card button,button{padding:10px 14px;border:0;border-radius:9px;cursor:pointer;background:var(--cyan);color:#06060f;font-weight:600;}
+.spts-card button:disabled,button:disabled{opacity:0.4;cursor:not-allowed;}
+.spts-ghost{background:transparent!important;color:var(--muted)!important;border:1px solid var(--line)!important;font-weight:400!important;}
+.spts-form-actions{display:flex;gap:10px;}
+.spts-error{color:#ff6b81;font-size:0.85rem;}
+.spts-danger{background:transparent;color:#ff6b81;border:1px solid #ff6b81;font-weight:400;}
+.spts-muted{color:var(--faint);font-size:0.85rem;}
+.spts-post{border-top:1px solid var(--line);padding:16px 0;}
+.spts-avatar{width:110px;height:110px;object-fit:cover;border-radius:50%;border:1px solid var(--line);}
+.spts-avatar-sm{width:56px;height:56px;object-fit:cover;border-radius:50%;border:1px solid var(--line);}
+.spts-public header,.spts-page header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;}
+.spts-public header a,.spts-page header a{color:var(--cyan);font-size:0.85rem;}
+.spts-page h1{color:var(--white);}
+.spts-bio{white-space:pre-wrap;line-height:1.6;}
+.spts-link{background:none;text-decoration:underline;color:var(--cyan);padding:0;}
+.spts-post-actions{display:flex;gap:10px;align-items:center;margin:10px 0;}
+.spts-post-actions button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;}
+.spts-post-actions .spts-liked{color:var(--violet);border-color:var(--violet);}
+.spts-comments{display:flex;flex-direction:column;gap:8px;}
+.spts-comment{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--faintest);}
+.spts-comments form{display:flex;gap:8px;margin-top:6px;}
+.spts-comments input{flex:1;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--white);}
+.spts-profile-summary{display:flex;gap:14px;align-items:flex-start;}
+.spts-profile-summary .spts-name{color:var(--white);font-weight:600;}
+.spts-profile-summary-actions{margin-left:auto;display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
+.spts-profile-summary-actions a{color:var(--cyan);font-size:0.8rem;}
+.spts-conversation{border-top:1px solid var(--line);padding:12px 0;}
+.spts-conversation-head{color:var(--cyan);font-size:0.75rem;letter-spacing:0.04em;margin-bottom:8px;}
+.spts-message{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;}
+.spts-message button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;}
+
+/* ------------------------------------------------------------------ *
+ * Replies (additive)
+ * ------------------------------------------------------------------ */
+.spts-message{flex-wrap:wrap;}
+.spts-message-actions{display:flex;gap:8px;align-items:center;}
+.spts-message-actions button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;padding:6px 10px;font-size:0.8rem;}
+.spts-replies{flex-basis:100%;margin:6px 0 4px 0;padding-left:12px;border-left:2px solid var(--faintest);display:flex;flex-direction:column;gap:6px;}
+.spts-reply{display:flex;align-items:flex-start;gap:10px;padding:6px 10px;border-radius:9px;background:rgba(255,255,255,0.02);border:1px solid var(--faintest);}
+.spts-reply p{flex:1;color:var(--white);font-size:0.9rem;line-height:1.4;word-break:break-word;}
+.spts-reply-owner{background:rgba(34,211,238,0.05);border-color:rgba(34,211,238,0.2);}
+.spts-reply-visitor{background:rgba(255,255,255,0.03);}
+.spts-reply-role{font-size:0.65rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);min-width:52px;padding-top:2px;}
+.spts-reply button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400;padding:4px 8px;font-size:0.75rem;}
+.spts-reply-form{display:flex;gap:8px;margin-top:2px;}
+.spts-reply-form input{flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--white);font-size:0.85rem;}
+.spts-reply-form button{padding:8px 12px;font-size:0.85rem;}
+
+/* ------------------------------------------------------------------ *
+ * Toasts
+ * ------------------------------------------------------------------ */
+.spts-toast-host{position:fixed;top:16px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:1000;max-width:min(380px,90vw);}
+.spts-toast{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:rgba(20,20,30,0.95);color:var(--white);font-size:0.85rem;cursor:pointer;animation:spts-toast-in .18s ease-out;box-shadow:0 8px 24px rgba(0,0,0,.35);}
+.spts-toast-icon{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border:1px solid currentColor;border-radius:2px;font-weight:700;font-size:0.66rem;line-height:1;flex:0 0 auto;}
+.spts-toast-icon .spts-ico{width:11px;height:11px;}
+.spts-toast.spts-toast-success{border-left:2px solid var(--cyan);}
+.spts-toast-success .spts-toast-icon{color:var(--cyan);}
+.spts-toast.spts-toast-error{border-left:2px solid #ff6b81;}
+.spts-toast-error .spts-toast-icon{color:#ff6b81;}
+.spts-toast.spts-toast-info{border-left:2px solid var(--violet);}
+.spts-toast-info .spts-toast-icon{color:#bcaeff;}
+@keyframes spts-toast-in{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+
+/* ------------------------------------------------------------------ *
+ * Modal / confirm dialog
+ * ------------------------------------------------------------------ */
+.spts-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:1001;animation:spts-fade .15s ease-out;}
+@keyframes spts-fade{from{opacity:0;}to{opacity:1;}}
+.spts-modal{width:100%;max-width:460px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:0 16px 48px rgba(0,0,0,.5);}
+.spts-modal-title{color:var(--white);font-size:1rem;margin-bottom:10px;}
+.spts-modal-body{color:var(--muted);font-size:0.88rem;line-height:1.55;display:grid;gap:8px;}
+.spts-modal-list{margin:4px 0 0 18px;padding:0;display:grid;gap:4px;font-size:0.85rem;}
+.spts-modal-typed{display:grid;gap:6px;margin-top:12px;font-size:0.8rem;}
+.spts-modal-typed input{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--white);font:inherit;}
+.spts-modal-typed input:focus{outline:none;border-color:var(--cyan);}
+.spts-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+
+/* ------------------------------------------------------------------ *
+ * Spinner (used inside SpinnerButton)
+ * ------------------------------------------------------------------ */
+.spts-spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;margin-right:6px;vertical-align:-2px;animation:spts-spin .7s linear infinite;}
+@keyframes spts-spin{to{transform:rotate(360deg);}}
+.spts-spinner-lg{width:28px;height:28px;border-width:3px;color:var(--cyan);margin:0 0 14px;}
+
+/* ------------------------------------------------------------------ *
+ * Empty state
+ * ------------------------------------------------------------------ */
+.spts-empty{display:grid;gap:10px;justify-items:start;padding:8px 0;}
+
+/* ==================================================================== *
+ * Public profile page — professional presentation layer
+ * Scoped to .spts-public so the dashboard (.spts-page) is untouched.
+ * ==================================================================== */
+.spts-public{max-width:640px;padding:48px 18px 64px;}
+
+/* Loading / not-found states */
+.spts-public-status{min-height:40vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding:40px 0;}
+.spts-public-status h1{color:var(--white);font-size:1.4rem;}
+
+/* Hero */
+.spts-profile-hero{
+ display:flex;flex-direction:column;align-items:center;text-align:center;
+ padding:36px 24px 30px;margin-bottom:20px;border-radius:20px;
+ background:radial-gradient(120% 140% at 50% -20%,rgba(34,211,238,0.09),transparent 60%),rgba(255,255,255,0.02);
+ border:1px solid var(--line);
+}
+.spts-avatar-lg{
+ width:132px;height:132px;border-radius:50%;object-fit:cover;
+ border:3px solid var(--bg);
+ box-shadow:0 0 0 2px var(--cyan),0 0 32px rgba(34,211,238,0.25);
+ margin-bottom:18px;background:var(--faintest);
+}
+.spts-avatar-fallback{
+ display:flex;align-items:center;justify-content:center;
+ font-size:3rem;font-weight:700;color:var(--white);
+ background:linear-gradient(140deg,var(--violet),var(--cyan));
+}
+.spts-profile-name{color:var(--white);font-size:1.75rem;font-weight:700;letter-spacing:-0.01em;line-height:1.2;}
+.spts-profile-handle{color:var(--cyan);font-size:0.9rem;letter-spacing:0.02em;margin-top:2px;}
+.spts-profile-bio{max-width:480px;margin:16px 0 0;color:var(--ink);font-size:0.95rem;}
+.spts-profile-meta{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:18px;}
+.spts-meta-chip{
+ display:inline-flex;align-items:center;gap:6px;
+ padding:6px 14px;border-radius:999px;
+ border:1px solid var(--line);background:rgba(255,255,255,0.02);
+ color:var(--ink);font-size:0.8rem;text-decoration:none;
+ transition:border-color .15s ease,color .15s ease;
+}
+.spts-meta-chip:hover{border-color:var(--cyan);color:var(--cyan);}
+.spts-profile-hero-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:22px;}
+.spts-profile-hero-actions .spts-link-btn{
+ display:inline-flex;align-items:center;padding:10px 14px;border-radius:9px;
+ border:1px solid var(--line);color:var(--muted);font-size:0.85rem;text-decoration:none;
+}
+.spts-contact-note{display:block;margin-top:16px;font-size:0.72rem;opacity:0.75;}
+
+/* Sections */
+.spts-section{scroll-margin-top:24px;}
+.spts-empty-text{padding:10px 0;}
+
+/* Post grid inside the public page — turns the plain post list into cards */
+.spts-post-grid{display:grid;gap:18px;margin-top:4px;}
+.spts-post-grid .spts-post{
+ border-top:0;padding:0;border:1px solid var(--line);border-radius:14px;
+ background:rgba(255,255,255,0.015);overflow:hidden;
+}
+.spts-post-grid .spts-post .spts-media-frame{border-radius:0;}
+.spts-post-grid .spts-post > p{padding:12px 16px 0;}
+.spts-post-grid .spts-post-actions{padding:0 16px;}
+.spts-post-grid .spts-comments{padding:0 16px 16px;}
+
+/* See more / show less */
+.spts-see-more{
+ display:block;width:100%;margin-top:14px;padding:11px 14px;
+ background:transparent;color:var(--cyan);
+ border:1px dashed var(--line);border-radius:10px;
+ font-weight:500;font-size:0.85rem;letter-spacing:0.01em;
+}
+.spts-see-more:hover{border-color:var(--cyan);}
+.spts-see-more.spts-ghost{color:var(--muted)!important;border-style:solid!important;}
+
+/* Error box (public-facing) */
+.spts-error-box{
+ display:flex;align-items:flex-start;gap:10px;
+ margin-top:12px;padding:9px 12px;border:1px solid var(--line);border-left:2px solid #ff6b81;border-radius:2px;
+ background:rgba(255,107,129,0.045);color:var(--white);font-size:0.8rem;line-height:1.5;
+}
+.spts-error-icon{
+ flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+ width:16px;height:16px;border:1px solid #ff6b81;border-radius:2px;color:#ff6b81;
+ font-weight:700;font-size:0.66rem;line-height:1;
+}
+
+/* Auto-delete (24h TTL) notices — friendly amber warning tone,
+ * distinct from the red error style above. */
+.spts-ttl-notice{
+ display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;
+ margin:10px 0;padding:9px 12px;border:1px solid var(--line);border-left:2px solid var(--cyan);border-radius:2px;
+ background:rgba(34,211,238,0.035);color:var(--muted);font-size:0.76rem;line-height:1.55;
+}
+.spts-ttl-notice .spts-hint{color:var(--cyan);font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;}
+.spts-ttl-notice-sm{
+ display:block;margin:6px 0 2px;color:var(--faint);font-size:0.7rem;line-height:1.5;
+}
+.spts-ttl-notice-sm .spts-hint{color:var(--cyan);}
+
+/* Small screens */
+@media (max-width:480px){
+ .spts-public{padding:28px 14px 48px;}
+ .spts-profile-hero{padding:28px 16px 24px;border-radius:16px;}
+ .spts-avatar-lg{width:104px;height:104px;}
+ .spts-profile-name{font-size:1.4rem;}
+}
+
+/* ==================================================================== *
+ * Post media viewer — portrait-first (9:16), adapts to landscape/
+ * square media, click-to-load video, one-at-a-time playback, and a
+ * distortion-free full-screen lightbox.
+ * ==================================================================== */
+.spts-media-frame{
+ position:relative;width:100%;max-width:460px;margin:0 auto;
+ border-radius:14px;overflow:hidden;
+ background:linear-gradient(160deg,rgba(34,211,238,0.07),rgba(139,92,246,0.05));
+ display:flex;align-items:center;justify-content:center;
+ aspect-ratio:9 / 16;max-height:88vh;
+ transition:aspect-ratio .25s ease;
+}
+.spts-media-square{max-width:520px;}
+.spts-media-landscape{max-width:640px;}
+.spts-media-el{
+ width:100%;height:100%;object-fit:contain;display:block;
+ background:#000;
+}
+img.spts-media-el{background:transparent;cursor:zoom-in;}
+video.spts-media-el{cursor:pointer;}
+.spts-media-play{
+ position:absolute;inset:0;margin:auto;width:64px;height:64px;
+ display:flex;align-items:center;justify-content:center;
+ border-radius:50%;border:1px solid rgba(255,255,255,0.35);
+ background:rgba(6,6,15,0.55);backdrop-filter:blur(2px);
+ color:var(--white);padding:0;
+ transition:transform .15s ease,background .15s ease;
+}
+.spts-media-play:hover{transform:scale(1.06);background:rgba(6,6,15,0.7);}
+.spts-media-play-icon{font-size:1.35rem;margin-left:3px;}
+.spts-media-expand{
+ position:absolute;top:10px;right:10px;
+ width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;
+ border-radius:8px;border:1px solid rgba(255,255,255,0.25);
+ background:rgba(6,6,15,0.55);color:var(--white);font-size:0.95rem;font-weight:400;
+ opacity:0.85;
+}
+.spts-media-expand:hover{opacity:1;border-color:var(--cyan);}
+
+.spts-lightbox-backdrop{
+ position:fixed;inset:0;z-index:1002;
+ background:rgba(0,0,0,0.92);
+ display:flex;align-items:center;justify-content:center;padding:24px;
+ animation:spts-fade .15s ease-out;
+}
+.spts-lightbox-stage{
+ max-width:100%;max-height:100%;display:flex;align-items:center;justify-content:center;
+}
+.spts-lightbox-media{
+ max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;
+}
+.spts-lightbox-close{
+ position:fixed;top:18px;right:18px;width:38px;height:38px;padding:0;
+ border-radius:50%;border:1px solid rgba(255,255,255,0.3);
+ background:rgba(6,6,15,0.6);color:var(--white);font-size:1rem;
+}
+.spts-lightbox-close:hover{border-color:var(--cyan);}
+
+/* Dashboard post preview (single latest post + link to full profile) */
+.spts-dashboard-post-hint{margin-top:10px;}
+
+@media (max-width:480px){
+ .spts-media-frame{max-width:100%;max-height:80vh;}
+ .spts-media-square,.spts-media-landscape{max-width:100%;}
+}
+
+/* ==================================================================== *
+ * Public-profile message box — the compose field and the visitor's
+ * own conversation (messages + replies) merged into one chat-style
+ * card. Reuses ConversationThread/ReplyThread as-is; scoped so the
+ * owner's Dashboard inbox (.spts-conversation outside .spts-messagebox)
+ * is untouched.
+ * ==================================================================== */
+.spts-messagebox-thread{
+ margin-top:12px;max-height:420px;overflow-y:auto;
+ border:1px solid var(--faintest);border-radius:12px;
+ background:rgba(255,255,255,0.015);padding:4px 12px;
+}
+.spts-messagebox .spts-conversation{border-top:0;padding:8px 0;}
+.spts-messagebox .spts-conversation-head{display:none;}
+.spts-messagebox .spts-message{
+ flex-direction:column;align-items:stretch;gap:6px;
+ background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.15);
+ border-radius:12px;padding:10px 12px;margin:8px 0;
+}
+.spts-messagebox .spts-message > p{color:var(--white);line-height:1.45;}
+.spts-messagebox .spts-message-actions{justify-content:flex-end;}
+.spts-messagebox .spts-replies{margin-top:2px;}
+.spts-messagebox-compose{display:flex;gap:10px;align-items:flex-end;margin-top:14px;}
+.spts-messagebox-compose textarea{
+ flex:1;height:46px;max-height:140px;padding:12px;resize:vertical;
+ border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--white);font:inherit;
+}
+.spts-messagebox-compose textarea:focus{outline:none;border-color:var(--cyan);}
+.spts-messagebox-compose button{flex:0 0 auto;align-self:stretch;}
+
+@media (max-width:480px){
+ .spts-messagebox-thread{max-height:340px;}
+ .spts-messagebox-compose{flex-direction:column;align-items:stretch;}
+}
+
+/* ==================================================================== *
+ * Premium — Dashboard controls (badge, upgrade button, file upload)
+ * ==================================================================== */
+.spts-card-head-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.spts-premium-tag{
+ display:inline-flex;align-items:center;gap:4px;
+ padding:3px 10px;border-radius:999px;font-size:0.7rem;font-weight:700;letter-spacing:0.03em;
+ background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;
+}
+.spts-premium-tag-sm{padding:1px 8px;font-size:0.62rem;margin-left:6px;}
+.spts-upgrade-btn{
+ display:inline-flex;align-items:center;gap:6px;
+ padding:8px 14px;border-radius:9px;font-weight:700;font-size:0.8rem;
+ background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;text-decoration:none;
+}
+.spts-upgrade-btn:hover{filter:brightness(1.06);}
+.spts-fileupload-row{display:grid;gap:6px;}
+.spts-fileupload-row input[type=file]{
+ padding:10px;border:1px dashed var(--line);border-radius:10px;
+ background:var(--bg);color:var(--muted);font-size:0.8rem;font-family:inherit;
+}
+.spts-upgrade-confirm{text-align:center;display:grid;gap:10px;justify-items:center;padding:24px 12px;}
+.spts-upgrade-confirm h2{color:var(--white);}
+
+/* Restricted-account notice (upgrade flow) + toast link */
+.spts-toast-action{color:var(--cyan);text-decoration:underline;font-weight:600;}
+.spts-flag-notice{display:grid;gap:12px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-left:2px solid var(--violet);border-radius:2px;background:rgba(124,92,255,0.06);color:var(--muted);font-size:0.82rem;line-height:1.6;}
+.spts-flag-notice > p:first-child{color:var(--white);}
+.spts-flag-notice ul{margin:4px 0 0 18px;padding:0;display:grid;gap:3px;}
+.spts-flag-h{font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:#bcaeff;}
+.spts-flag-h.spts-flag-ok{color:var(--cyan);}
+
+/* ==================================================================== *
+ * Premium public-profile theme — additive skin on top of the base
+ * theme, applied only when the profile owner is premium.
+ * ==================================================================== */
+.spts-premium-badge{
+ display:inline-flex;align-items:center;gap:4px;margin-top:6px;
+ padding:3px 10px;border-radius:999px;font-size:0.7rem;font-weight:700;letter-spacing:0.04em;
+ background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;
+}
+.spts-public.spts-premium .spts-profile-hero{
+ background:radial-gradient(120% 140% at 50% -20%,rgba(255,197,92,0.16),transparent 60%),linear-gradient(160deg,rgba(255,197,92,0.05),rgba(139,92,246,0.05));
+ border-color:rgba(255,197,92,0.35);
+}
+.spts-public.spts-premium .spts-avatar-lg{
+ box-shadow:0 0 0 2px #ffc55c,0 0 36px rgba(255,197,92,0.35);
+}
+.spts-public.spts-premium .spts-profile-handle{color:#ffc55c;}
+.spts-public.spts-premium .spts-card,
+.spts-public.spts-premium .spts-post-grid .spts-post{
+ border-color:rgba(255,197,92,0.22);
+ background:linear-gradient(160deg,rgba(255,197,92,0.035),rgba(255,255,255,0.015));
+}
+.spts-public.spts-premium .spts-meta-chip:hover{border-color:#ffc55c;color:#ffc55c;}
+.spts-public.spts-premium .spts-see-more{color:#ffc55c;}
+.spts-public.spts-premium .spts-see-more:hover{border-color:#ffc55c;}
+.spts-public.spts-premium .spts-messagebox .spts-message{
+ background:rgba(255,197,92,0.06);border-color:rgba(255,197,92,0.2);
+}
+
+/* Ads */
+.spts-card input[type="date"]{color-scheme:dark;}
+.spts-card p a{color:var(--cyan);}
+.spts-ad{max-width:none;margin:0;padding:0;color:var(--ink);display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;}
+.spts-ad-bar{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);}
+.spts-ad-bar .spts-link-btn{display:inline-flex;align-items:center;padding:8px 12px;border-radius:9px;font-size:0.85rem;text-decoration:none;}
+.spts-ad-frame{flex:1;width:100%;border:0;background:#fff;min-height:0;}
+
+.spts-ad-blank{background:transparent;}
+.spts-ad-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;}
+.spts-ad-link{display:inline-flex;align-items:center;padding:10px 14px;border-radius:9px;font-size:0.85rem;text-decoration:none;}
+.spts-card a.spts-ad-link.spts-ghost{color:var(--muted);}
+.spts-ad-cta{background:var(--cyan);color:#06060f;font-weight:600;}
+.spts-public-status .spts-ad-cta{margin-top:6px;}
+
+/* Ad request modal */
+.spts-modal-wide{max-width:480px;max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow-y:auto;}
+.spts-adform{display:grid;gap:14px;margin-top:6px;}
+.spts-adform label{display:grid;gap:6px;font-size:0.75rem;color:var(--muted);letter-spacing:0.02em;}
+.spts-adform input,.spts-adform textarea,.spts-adform select{padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--bg);color:var(--white);width:100%;box-sizing:border-box;}
+.spts-adform input:focus,.spts-adform textarea:focus,.spts-adform select:focus{outline:none;border-color:var(--cyan);}
+.spts-adform textarea{min-height:90px;resize:vertical;}
+.spts-adform input[type="date"]{color-scheme:dark;}
+.spts-adform-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.spts-adform-readonly{opacity:0.75;cursor:default;}
+@media (max-width:420px){.spts-adform-row{grid-template-columns:1fr;}}
+
+/* Public profile: posts + message tucked inside the hero behind buttons */
+.spts-hero-actions-2{margin-top:10px;}
+.spts-hero-panel{width:100%;text-align:left;margin-top:8px;}
+.spts-hero-panel:first-of-type{margin-top:18px;}
+.spts-hero-panel .spts-card{margin:8px 0 0;}
+
+/* Dashboard: read-only profile fields after initial setup */
+.spts-card input.spts-readonly{opacity:0.6;cursor:not-allowed;}
+
+/* Dashboard: profile + inbox behind buttons; delete visitor */
+.spts-dash-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0;}
+.spts-conversation-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.spts-conversation-head button{padding:6px 10px;font-size:0.75rem;}
+
+/* Ad viewer bar: small, subtle buttons */
+.spts-ad-bar{gap:8px;padding:6px 10px;}
+.spts-ad-bar .spts-link-btn,.spts-ad-bar button{padding:4px 10px;font-size:0.72rem;border-radius:7px;opacity:0.7;transition:opacity .15s ease;}
+.spts-ad-bar .spts-link-btn:hover,.spts-ad-bar button:hover{opacity:1;}
+
+/* Comments: hidden behind a button, smaller and visually distinct from the caption */
+.spts-comments{margin-top:8px;}
+.spts-comments > p.spts-muted{font-size:0.75rem;}
+.spts-comments .spts-comment{align-items:flex-start;padding:6px 8px;border-top:none;border-left:2px solid var(--line);border-radius:0 8px 8px 0;background:rgba(255,255,255,0.03);}
+.spts-comments .spts-comment p{margin:0;font-size:0.78rem;line-height:1.4;color:var(--muted);word-break:break-word;}
+.spts-comment-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.spts-comment-actions button{padding:2px 8px;font-size:0.7rem;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;font-weight:400;}
+.spts-comment-actions .spts-liked{color:var(--violet);border-color:var(--violet);}
+.spts-comments input{font-size:0.8rem;padding:8px;}
+
+/* Upgrade button is a <button> now: beat the generic button styles */
+button.spts-upgrade-btn,.spts-card button.spts-upgrade-btn{
+ background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;border:none;
+ padding:8px 14px;border-radius:9px;font-weight:700;font-size:0.8rem;cursor:pointer;
+}
+button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
+
+/* ==================================================================== *
+ * Public profile buttons — small pills. Basic profiles use the default
+ * (cyan) theme, premium profiles the gold one.
+ * ==================================================================== */
+.spts-profile-hero-actions{gap:8px;margin-top:20px;}
+.spts-profile-hero-actions button,
+.spts-profile-hero-actions .spts-link-btn{
+ display:inline-flex;align-items:center;gap:6px;
+ padding:6px 14px;border-radius:999px;font-size:0.76rem;font-weight:500;letter-spacing:0.02em;
+ background:rgba(34,211,238,0.07);color:var(--cyan);border:1px solid rgba(34,211,238,0.35);
+ text-decoration:none;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease;
+}
+.spts-profile-hero-actions button:hover,
+.spts-profile-hero-actions .spts-link-btn:hover{background:rgba(34,211,238,0.14);border-color:var(--cyan);}
+.spts-profile-hero-actions button[aria-expanded="true"]{background:var(--cyan);color:#06060f;border-color:var(--cyan);}
+/* utility row: quiet text links */
+.spts-hero-actions-2{margin-top:10px;gap:4px;}
+.spts-profile-hero-actions.spts-hero-actions-2 button,
+.spts-profile-hero-actions.spts-hero-actions-2 .spts-link-btn{
+ padding:2px 8px;font-size:0.7rem;border:0!important;background:transparent!important;color:var(--muted)!important;opacity:0.8;
+}
+.spts-profile-hero-actions.spts-hero-actions-2 button:hover,
+.spts-profile-hero-actions.spts-hero-actions-2 .spts-link-btn:hover{color:var(--cyan)!important;opacity:1;}
+/* premium */
+.spts-public.spts-premium .spts-profile-hero-actions button,
+.spts-public.spts-premium .spts-profile-hero-actions .spts-link-btn{background:rgba(255,197,92,0.08);color:#ffc55c;border-color:rgba(255,197,92,0.4);}
+.spts-public.spts-premium .spts-profile-hero-actions button:hover,
+.spts-public.spts-premium .spts-profile-hero-actions .spts-link-btn:hover{background:rgba(255,197,92,0.16);border-color:#ffc55c;}
+.spts-public.spts-premium .spts-profile-hero-actions button[aria-expanded="true"]{background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;border-color:transparent;}
+.spts-public.spts-premium .spts-profile-hero-actions.spts-hero-actions-2 button:hover,
+.spts-public.spts-premium .spts-profile-hero-actions.spts-hero-actions-2 .spts-link-btn:hover{color:#ffc55c!important;}
+
+/* ==================================================================== *
+ * Public profile chat: message 1 → reply 1 → message 2 → reply 2
+ * ==================================================================== */
+.spts-chat{padding:14px;}
+.spts-chat-head{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--line);}
+.spts-chat-head strong{display:block;color:var(--white);font-size:0.9rem;}
+.spts-chat-head small{display:block;color:var(--muted);font-size:0.68rem;}
+.spts-chat-avatar{
+ width:34px;height:34px;flex:none;border-radius:50%;object-fit:cover;
+ display:flex;align-items:center;justify-content:center;
+ background:linear-gradient(140deg,var(--violet),var(--cyan));color:#fff;font-weight:700;font-size:0.85rem;
+}
+.spts-chat-thread{display:flex;flex-direction:column;gap:12px;min-height:160px;max-height:340px;overflow-y:auto;padding:14px 2px;}
+.spts-chat-empty{margin:auto;text-align:center;}
+.spts-chat-exchange{display:flex;flex-direction:column;gap:6px;}
+.spts-chat-row{display:flex;flex-direction:column;max-width:82%;}
+.spts-chat-me{align-self:flex-end;align-items:flex-end;}
+.spts-chat-them{align-self:flex-start;align-items:flex-start;}
+.spts-chat-bubble{padding:8px 12px;border-radius:16px;font-size:0.88rem;line-height:1.4;word-break:break-word;white-space:pre-wrap;}
+.spts-chat-me .spts-chat-bubble{background:var(--cyan);color:#06060f;border-bottom-right-radius:4px;}
+.spts-chat-me .spts-chat-bubble a{color:#06060f;text-decoration:underline;}
+.spts-chat-them .spts-chat-bubble{background:rgba(255,255,255,0.06);color:var(--white);border:1px solid var(--line);border-bottom-left-radius:4px;}
+.spts-chat-meta{display:flex;gap:8px;margin-top:2px;font-size:0.65rem;color:var(--muted);}
+.spts-chat .spts-chat-meta button.spts-chat-del{
+ padding:0;background:none;color:var(--muted);font-size:0.65rem;font-weight:400;
+ text-decoration:underline;border:0;cursor:pointer;
+}
+.spts-chat-compose{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--line);padding-top:10px;}
+.spts-chat .spts-chat-compose textarea{flex:1;height:40px;max-height:110px;padding:9px 14px;border-radius:20px;resize:none;}
+.spts-chat .spts-chat-compose button.spts-chat-send{flex:none;width:40px;height:40px;padding:0;border-radius:50%;font-size:0.95rem;display:flex;align-items:center;justify-content:center;}
+.spts-chat-foot{display:flex;justify-content:space-between;margin-top:6px;font-size:0.65rem;color:var(--muted);}
+/* premium chat */
+.spts-public.spts-premium .spts-chat-me .spts-chat-bubble{background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;}
+.spts-public.spts-premium .spts-chat-me .spts-chat-bubble a{color:#241300;}
+.spts-public.spts-premium .spts-chat .spts-chat-compose button.spts-chat-send{background:linear-gradient(120deg,#ffc55c,#ff8a3d);color:#241300;}
+.spts-public.spts-premium .spts-chat .spts-chat-compose textarea:focus{border-color:#ffc55c;}
+
+
+/* ================================================================
+   SPTS PROFILE NETWORK — MAIN APP VISUAL OVERRIDES
+   Presentation only. Existing classes/markup/JS logic are preserved.
+   ================================================================ */
+
+.spts-page,
+.spts-public {
+  width: min(1100px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 42px 0 90px;
+  color: var(--ink);
+}
+
+.spts-page header {
+  padding: 0 0 20px;
+  margin-bottom: 30px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+
+.spts-page header::after {
+  content: 'profile.network';
+  position: absolute;
+  left: 0;
+  bottom: -9px;
+  padding-right: 10px;
+  background: var(--bg);
+  color: var(--violet);
+  font-size: .62rem;
+  letter-spacing: .08em;
+}
+
+.spts-page h1,
+.spts-public h1,
+.spts-page h2,
+.spts-public h2,
+.spts-page h3,
+.spts-public h3 {
+  font-weight: 400;
+}
+
+.spts-page h1 {
+  color: var(--cyan);
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  letter-spacing: -.02em;
+}
+
+.spts-page h1::before,
+.spts-public-status h1::before {
+  content: '> ';
+  color: var(--violet);
+}
+
+.spts-page button,
+.spts-public button {
+  min-height: 40px;
+  padding: 10px 16px;
+  border: 1px solid var(--cyan);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--cyan);
+  font: inherit;
+  font-size: .74rem;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: color .25s ease, border-color .25s ease, background .25s ease,
+    box-shadow .25s ease, transform .25s ease;
+}
+
+.spts-page button:hover,
+.spts-public button:hover {
+  color: var(--white);
+  border-color: var(--white);
+  background: rgba(34,211,238,.045);
+  box-shadow: 0 0 28px rgba(34,211,238,.08);
+}
+
+.spts-page button:active,
+.spts-public button:active {
+  transform: translateY(1px);
+}
+
+.spts-ghost,
+.spts-page .spts-ghost,
+.spts-public .spts-ghost {
+  border-color: var(--line) !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+}
+
+.spts-ghost:hover {
+  border-color: var(--cyan) !important;
+  color: var(--cyan) !important;
+}
+
+.spts-danger {
+  border-color: rgba(255,107,129,.65) !important;
+  color: #ff6b81 !important;
+  background: transparent !important;
+}
+
+.spts-form-actions,
+.spts-dash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.spts-dash-actions {
+  margin: 0 0 46px;
+}
+
+.spts-card {
+  position: relative;
+  margin: 0 0 72px;
+  padding: 0 0 34px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.spts-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -22px;
+  width: 90px;
+  height: 1px;
+  background: linear-gradient(90deg,var(--cyan),transparent);
+  opacity: .65;
+}
+
+.spts-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.spts-card-head h2 {
+  color: var(--cyan);
+  font-size: clamp(1.25rem, 3vw, 1.65rem);
+}
+
+.spts-card-head h2::before {
+  content: '> ';
+  color: var(--violet);
+}
+
+.spts-card form {
+  display: grid;
+  gap: 18px;
+  margin-top: 26px;
+}
+
+.spts-card label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: .72rem;
+  letter-spacing: .03em;
+}
+
+.spts-card input,
+.spts-card textarea,
+.spts-comments input,
+.spts-reply-form input,
+.spts-modal-typed input,
+.spts-messagebox-compose textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  outline: 0;
+  background: rgba(6,6,15,.7);
+  color: var(--white);
+  font: inherit;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.spts-card input:focus,
+.spts-card textarea:focus,
+.spts-comments input:focus,
+.spts-reply-form input:focus,
+.spts-modal-typed input:focus,
+.spts-messagebox-compose textarea:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 22px rgba(34,211,238,.06);
+}
+
+.spts-card textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.spts-muted {
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.spts-link {
+  background: none;
+  color: var(--cyan);
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.spts-error {
+  margin: -34px 0 54px;
+  color: #ff6b81;
+  font-size: .82rem;
+}
+
+.spts-profile-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 0 6px;
+}
+
+.spts-profile-summary .spts-name {
+  color: var(--white);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.spts-profile-summary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.spts-profile-summary-actions a {
+  color: var(--cyan);
+  font-size: .74rem;
+  text-decoration: none;
+}
+
+.spts-avatar,
+.spts-avatar-sm {
+  object-fit: cover;
+  border: 1px solid var(--faintest);
+  background: var(--faintest);
+}
+
+.spts-avatar {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+}
+
+.spts-avatar-sm {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+}
+
+.spts-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid var(--faintest);
+  border-radius: 999px;
+  background: rgba(255,255,255,.015);
+  color: var(--cyan);
+  font-size: .66rem;
+  letter-spacing: .06em;
+}
+
+.spts-post {
+  padding: 22px 0;
+  border-top: 1px solid var(--line);
+}
+
+.spts-post:first-child {
+  border-top: 0;
+}
+
+.spts-post-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.spts-post-actions button {
+  min-height: 34px;
+  padding: 7px 11px;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.spts-post-actions .spts-liked {
+  color: var(--violet);
+  border-color: rgba(124,92,255,.55);
+}
+
+.spts-post-grid {
+  display: grid;
+  gap: 34px;
+  margin-top: 24px;
+}
+
+.spts-see-more {
+  display: block;
+  width: 100%;
+  margin-top: 20px;
+  border-style: dashed !important;
+  border-color: var(--faintest) !important;
+  color: var(--cyan) !important;
+  text-align: left;
+  background: transparent !important;
+}
+
+.spts-media-frame {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 9 / 16;
+  max-height: 82vh;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: radial-gradient(80% 55% at 50% 0,rgba(34,211,238,.07),transparent 70%),
+    rgba(255,255,255,.012);
+}
+
+.spts-media-square {
+  max-width: 560px;
+  aspect-ratio: 1 / 1;
+}
+
+.spts-media-landscape {
+  max-width: 720px;
+  aspect-ratio: 16 / 9;
+}
+
+.spts-media-el {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+
+.spts-public {
+  max-width: 1100px;
+  padding-top: 76px;
+}
+
+.spts-profile-hero {
+  position: relative;
+  min-height: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 30px 0 58px;
+  margin-bottom: 72px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  background: radial-gradient(520px 260px at 72% 8%,rgba(124,92,255,.09),transparent 70%),
+    radial-gradient(460px 240px at 22% 5%,rgba(34,211,238,.075),transparent 70%);
+}
+
+.spts-profile-hero::before {
+  content: '> profile.network';
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--violet);
+  font-size: .68rem;
+  letter-spacing: .1em;
+}
+
+.spts-profile-hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 150px;
+  height: 1px;
+  background: linear-gradient(90deg,var(--cyan),transparent);
+}
+
+.spts-avatar-lg {
+  width: 132px;
+  height: 132px;
+  margin-bottom: 22px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  box-shadow: 0 0 0 1px rgba(34,211,238,.18),0 0 42px rgba(34,211,238,.12);
+  background: var(--faintest);
+}
+
+.spts-profile-name {
+  color: var(--white);
+  font-size: clamp(2rem,6vw,4rem);
+  line-height: 1.08;
+  letter-spacing: -.04em;
+}
+
+.spts-profile-handle {
+  margin-top: 7px;
+  color: var(--cyan);
+  font-size: .88rem;
+  letter-spacing: .04em;
+}
+
+.spts-profile-bio {
+  max-width: 700px;
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: .96rem;
+  line-height: 1.85;
+}
+
+.spts-profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.spts-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--muted);
+  background: rgba(255,255,255,.012);
+  font-size: .72rem;
+  text-decoration: none;
+}
+
+.spts-meta-chip:hover {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.spts-profile-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.spts-profile-hero-actions .spts-link-btn,
+.spts-profile-hero-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 10px 16px;
+  text-decoration: none;
+}
+
+.spts-contact-note {
+  display: block;
+  margin-top: 22px;
+  color: var(--faint);
+  font-size: .68rem;
+}
+
+.spts-hero-panel {
+  width: min(820px,100%);
+  margin-top: 52px;
+  padding-top: 1px;
+  border-top: 1px solid var(--line);
+}
+
+.spts-hero-panel .spts-card {
+  margin: 38px 0 0;
+}
+
+.spts-chat {
+  margin-bottom: 0 !important;
+}
+
+.spts-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.spts-chat-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--cyan);
+  background: var(--faintest);
+  object-fit: cover;
+}
+
+.spts-chat-thread {
+  max-height: 440px;
+  overflow-y: auto;
+  margin: 18px 0 0;
+  padding: 2px 0 8px;
+}
+
+.spts-chat-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  margin: 10px 0;
+}
+
+.spts-chat-row.spts-chat-me {
+  justify-content: flex-end;
+}
+
+.spts-chat-bubble {
+  max-width: min(76%,620px);
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 2px 12px 12px 12px;
+  color: var(--white);
+  background: rgba(255,255,255,.018);
+  font-size: .84rem;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.spts-chat-me .spts-chat-bubble {
+  border-color: rgba(34,211,238,.22);
+  border-radius: 12px 2px 12px 12px;
+  background: rgba(34,211,238,.045);
+}
+
+.spts-chat-compose {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.spts-chat-compose textarea {
+  flex: 1;
+  min-height: 44px;
+  max-height: 150px;
+  resize: vertical;
+}
+
+.spts-chat-send {
+  flex: 0 0 46px;
+  width: 46px;
+  min-height: 44px !important;
+  padding: 0 !important;
+}
+
+.spts-conversation {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+
+.spts-message {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+}
+
+.spts-replies {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 4px;
+  padding-left: 14px;
+  border-left: 1px solid var(--faintest);
+}
+
+.spts-reply {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--faintest);
+  border-radius: 2px;
+  background: rgba(255,255,255,.014);
+}
+
+.spts-reply-owner {
+  border-color: rgba(34,211,238,.2);
+  background: rgba(34,211,238,.035);
+}
+
+.spts-reply-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+.spts-reply-form input {
+  flex: 1;
+}
+
+.spts-messagebox-thread {
+  max-height: 420px;
+  overflow-y: auto;
+  margin-top: 12px;
+  padding: 4px 12px;
+  border: 1px solid var(--faintest);
+  border-radius: 2px;
+  background: rgba(255,255,255,.012);
+}
+
+.spts-messagebox-compose {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-top: 16px;
+}
+
+.spts-messagebox-compose textarea {
+  min-height: 46px;
+  max-height: 140px;
+  resize: vertical;
+}
+
+.spts-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.spts-comment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--faintest);
+}
+
+.spts-comments form {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.spts-comments input {
+  flex: 1;
+}
+
+.spts-ad {
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+
+.spts-ad-bar,
+.spts-ad-actions,
+.spts-adform-row,
+.spts-fileupload-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.spts-ad-bar {
+  justify-content: space-between;
+}
+
+.spts-ad-frame {
+  margin: 16px 0;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255,255,255,.012);
+}
+
+.spts-ad-frame.spts-ad-blank {
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--faint);
+}
+
+.spts-ad-link {
+  color: var(--cyan);
+  font-size: .78rem;
+  text-decoration: none;
+}
+
+.spts-ad-link.spts-ad-cta {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid var(--violet);
+  color: #bcaeff;
+}
+
+.spts-adform {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.spts-toast-host {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(380px,calc(100vw - 32px));
+}
+
+.spts-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: rgba(6,6,15,.94);
+  color: var(--white);
+  font-size: .78rem;
+  line-height: 1.5;
+  box-shadow: 0 18px 45px rgba(0,0,0,.35);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .spts-page,
+  .spts-public {
+    width: min(100% - 28px,1100px);
+    padding-top: 28px;
+  }
+
+  .spts-page header {
+    margin-bottom: 24px;
+  }
+
+  .spts-profile-summary {
+    grid-template-columns: auto minmax(0,1fr);
+  }
+
+  .spts-profile-summary-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .spts-profile-hero {
+    min-height: 0;
+    padding: 24px 0 44px;
+    margin-bottom: 54px;
+  }
+
+  .spts-profile-name {
+    font-size: clamp(2rem,12vw,3.2rem);
+  }
+
+  .spts-avatar-lg {
+    width: 104px;
+    height: 104px;
+  }
+
+  .spts-card {
+    margin-bottom: 54px;
+  }
+
+  .spts-chat-bubble {
+    max-width: 88%;
+  }
+
+  .spts-chat-compose,
+  .spts-messagebox-compose,
+  .spts-reply-form,
+  .spts-comments form {
+    flex-direction: column;
+  }
+
+  .spts-chat-send {
+    width: 100%;
+    flex-basis: auto;
+  }
+}
+
+@media (max-width: 460px) {
+  .spts-page,
+  .spts-public {
+    width: min(100% - 22px,1100px);
+  }
+
+  .spts-profile-hero-actions {
+    width: 100%;
+  }
+
+  .spts-profile-hero-actions > *,
+  .spts-profile-hero-actions .spts-link-btn {
+    width: 100%;
+  }
+
+  .spts-post-actions button {
+    flex: 1;
+  }
+}
+
+
+/* ================================================================
+   PUBLIC PROFILE CHAT — ALIGNMENT UPGRADE
+   Presentation-only override. Keeps existing chat logic/markup.
+   ================================================================ */
+
+.spts-public .spts-chat {
+  width: 100%;
+  max-width: 820px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.spts-public .spts-chat-head {
+  min-height: 60px;
+  align-items: center;
+}
+
+.spts-public .spts-chat-thread {
+  width: 100%;
+  box-sizing: border-box;
+  scrollbar-gutter: stable;
+}
+
+.spts-public .spts-chat-compose {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 16px;
+  box-sizing: border-box;
+}
+
+.spts-public .spts-chat-compose textarea {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  max-height: 140px;
+  margin: 0;
+  box-sizing: border-box;
+  resize: none;
+  display: block;
+  line-height: 22px;
+}
+
+.spts-public .spts-chat-send {
+  width: 46px;
+  height: 44px;
+  min-width: 46px;
+  min-height: 44px !important;
+  margin: 0;
+  padding: 0 !important;
+  box-sizing: border-box;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spts-public .spts-chat-foot {
+  width: 100%;
+  min-height: 18px;
+  margin-top: 7px;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.spts-public .spts-chat-row {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.spts-public .spts-chat-bubble {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.spts-public .spts-chat-meta {
+  line-height: 1.35;
+}
+
+.spts-public .spts-chat-compose textarea:focus {
+  outline: none;
+}
+
+@media (max-width: 520px) {
+  .spts-public .spts-chat-compose {
+    grid-template-columns: minmax(0, 1fr) 42px;
+    gap: 8px;
+  }
+
+  .spts-public .spts-chat-send {
+    width: 42px;
+    min-width: 42px;
+  }
+
+  .spts-public .spts-chat-compose textarea {
+    height: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Override the earlier mobile column rule so the composer stays inline. */
+@media (max-width: 760px) {
+  .spts-public .spts-chat-compose {
+    flex-direction: initial;
+  }
+
+  .spts-public .spts-chat-send {
+    width: auto;
+    flex-basis: auto;
+  }
+}
+
+/* ================================================================
+   FINAL PROFILE VISIBILITY + ALIGNMENT REPAIR
+   CSS-only: no markup, state, event handlers or data logic changed.
+   ================================================================ */
+
+.spts-public,
+.spts-page {
+  color: var(--ink);
+  font-family: inherit;
+  line-height: 1.6;
+}
+
+.spts-public *,
+.spts-page * {
+  box-sizing: border-box;
+}
+
+/* Keep normal text readable wherever the page inherits a weak color. */
+.spts-public p,
+.spts-public span,
+.spts-public small,
+.spts-public li,
+.spts-page p,
+.spts-page span,
+.spts-page small,
+.spts-page li {
+  text-shadow: none;
+}
+
+.spts-public .spts-profile-bio,
+.spts-public .spts-bio,
+.spts-public .spts-muted,
+.spts-public .spts-contact-note,
+.spts-public .spts-chat-foot,
+.spts-public .spts-chat-meta,
+.spts-public .spts-conversation-head,
+.spts-public .spts-comment p,
+.spts-public .spts-comment-actions button {
+  opacity: 1;
+}
+
+.spts-public .spts-profile-bio {
+  color: var(--ink);
+}
+
+.spts-public .spts-muted {
+  color: var(--muted);
+}
+
+.spts-public .spts-contact-note {
+  color: var(--faint);
+}
+
+.spts-public .spts-card-head h2,
+.spts-public .spts-card h2,
+.spts-public .spts-card h3,
+.spts-public .spts-conversation-head {
+  color: var(--cyan);
+}
+
+.spts-public .spts-card-head-badges {
+  color: var(--ink);
+}
+
+.spts-public .spts-premium-badge,
+.spts-public .spts-premium-tag,
+.spts-public .spts-premium-tag-sm {
+  color: #241300;
+}
+
+/* Links must remain visible against the dark app background. */
+.spts-public a:not(.spts-link-btn):not(.spts-meta-chip):not(.spts-ad-link),
+.spts-page a:not(.spts-link) {
+  color: var(--cyan);
+}
+
+.spts-public a:hover,
+.spts-page a:hover {
+  color: var(--white);
+}
+
+/* All form controls use the same visible text/background treatment. */
+.spts-public input,
+.spts-public textarea,
+.spts-public select,
+.spts-page input,
+.spts-page textarea,
+.spts-page select {
+  color: var(--white);
+  background: rgba(6,6,15,.82);
+  caret-color: var(--cyan);
+}
+
+.spts-public input::placeholder,
+.spts-public textarea::placeholder,
+.spts-page input::placeholder,
+.spts-page textarea::placeholder {
+  color: var(--faint);
+  opacity: 1;
+}
+
+.spts-public input:disabled,
+.spts-public textarea:disabled,
+.spts-page input:disabled,
+.spts-page textarea:disabled {
+  color: var(--muted);
+  opacity: .72;
+}
+
+/* Buttons: make their labels/icons visible and vertically centered. */
+.spts-public button,
+.spts-page button {
+  font-family: inherit;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.spts-public .spts-link-btn,
+.spts-public .spts-ad-link,
+.spts-public .spts-see-more {
+  color: var(--cyan);
+}
+
+.spts-public .spts-ghost {
+  color: var(--muted) !important;
+}
+
+/* Public hero stays structurally aligned while all hero content has a
+   predictable width, so long names/bios cannot push controls around. */
+.spts-public .spts-profile-hero {
+  width: 100%;
+}
+
+.spts-public .spts-profile-name,
+.spts-public .spts-profile-handle,
+.spts-public .spts-profile-bio {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.spts-public .spts-profile-meta,
+.spts-public .spts-profile-hero-actions {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+/* Chat: one stable row for composer at every width. */
+.spts-public .spts-chat {
+  width: 100%;
+  max-width: 820px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.spts-public .spts-chat-head,
+.spts-public .spts-chat-thread,
+.spts-public .spts-chat-compose,
+.spts-public .spts-chat-foot {
+  width: 100%;
+}
+
+.spts-public .spts-chat-head {
+  min-width: 0;
+}
+
+.spts-public .spts-chat-head > div:last-child {
+  min-width: 0;
+}
+
+.spts-public .spts-chat-head strong,
+.spts-public .spts-chat-head small {
+  overflow-wrap: anywhere;
+}
+
+.spts-public .spts-chat-thread {
+  min-height: 160px;
+  max-height: 340px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.spts-public .spts-chat-exchange {
+  width: 100%;
+}
+
+.spts-public .spts-chat-row {
+  min-width: 0;
+}
+
+.spts-public .spts-chat-bubble {
+  max-width: min(82%, 680px);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.spts-public .spts-chat-compose {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 44px !important;
+  align-items: end !important;
+  gap: 10px !important;
+  margin: 0 !important;
+  padding: 14px 0 0 !important;
+  border-top: 1px solid var(--line);
+}
+
+.spts-public .spts-chat-compose textarea {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 44px !important;
+  max-height: 140px !important;
+  overflow-y: auto;
+  margin: 0 !important;
+  padding: 10px 14px !important;
+  resize: none !important;
+  display: block !important;
+  line-height: 22px !important;
+  border-radius: 22px !important;
+}
+
+.spts-public .spts-chat-compose .spts-chat-send,
+.spts-public .spts-chat-compose button.spts-chat-send {
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  max-height: 44px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  align-self: end !important;
+  justify-self: stretch !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  line-height: 1 !important;
+  font-size: .95rem !important;
+}
+
+.spts-public .spts-chat-compose .spts-chat-send .spts-spinner {
+  margin: 0;
+}
+
+.spts-public .spts-chat-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 18px;
+  margin: 7px 0 0;
+  padding: 0;
+  color: var(--faint);
+}
+
+/* Empty chat state should never collapse or disappear. */
+.spts-public .spts-chat-empty {
+  display: grid;
+  place-items: center;
+  min-height: 132px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Comments / replies: keep controls and text visible and contained. */
+.spts-public .spts-comment,
+.spts-public .spts-reply,
+.spts-public .spts-message {
+  min-width: 0;
+}
+
+.spts-public .spts-comment p,
+.spts-public .spts-reply p,
+.spts-public .spts-message > p {
+  color: var(--white);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.spts-public .spts-comment-actions,
+.spts-public .spts-message-actions {
+  flex-shrink: 0;
+}
+
+/* Modal and lightbox text visibility. */
+.spts-modal-backdrop,
+.spts-lightbox-backdrop {
+  color: var(--ink);
+}
+
+.spts-modal,
+.spts-modal-body,
+.spts-modal-title,
+.spts-modal-list,
+.spts-modal-typed,
+.spts-modal-actions {
+  color: var(--ink);
+}
+
+.spts-modal-title {
+  color: var(--white) !important;
+}
+
+.spts-modal-body {
+  color: var(--muted) !important;
+}
+
+.spts-modal-body strong,
+.spts-modal-body b,
+.spts-modal-list strong,
+.spts-modal-list b {
+  color: var(--white);
+}
+
+.spts-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.spts-lightbox-media {
+  display: block;
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Toast text/action visibility. */
+.spts-toast {
+  color: var(--white);
+}
+
+.spts-toast-action {
+  color: var(--cyan) !important;
+}
+
+/* Error / warning text must remain readable. */
+.spts-public .spts-error-box,
+.spts-public .spts-ttl-notice,
+.spts-public .spts-flag-notice {
+  opacity: 1;
+}
+
+/* Prevent horizontal clipping caused by long generated/user text. */
+.spts-public .spts-card,
+.spts-public .spts-post,
+.spts-public .spts-post-grid,
+.spts-public .spts-hero-panel,
+.spts-public .spts-messagebox,
+.spts-public .spts-ad {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .spts-public .spts-profile-hero-actions,
+  .spts-public .spts-profile-meta {
+    justify-content: flex-start;
+  }
+
+  .spts-public .spts-chat-compose {
+    display: grid !important;
+    grid-template-columns: minmax(0,1fr) 44px !important;
+    flex-direction: initial !important;
+  }
+
+  .spts-public .spts-chat-compose .spts-chat-send {
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+  }
+
+  .spts-public .spts-chat-bubble {
+    max-width: 90%;
+  }
+}
+
+@media (max-width: 460px) {
+  .spts-public {
+    width: min(100% - 22px,1100px);
+  }
+
+  .spts-public .spts-chat-compose {
+    grid-template-columns: minmax(0,1fr) 42px !important;
+    gap: 8px !important;
+  }
+
+  .spts-public .spts-chat-compose .spts-chat-send {
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+  }
+}
+
+
+/* ================================================================
+   PUBLIC CHAT — MESSAGE VISIBILITY FIX
+   Explicitly restore readable text colors for every chat state.
+   ================================================================ */
+
+.spts-public .spts-chat,
+.spts-public .spts-chat * {
+  text-shadow: none;
+}
+
+.spts-public .spts-chat-bubble,
+.spts-public .spts-chat-bubble p,
+.spts-public .spts-chat-bubble span,
+.spts-public .spts-chat-bubble div {
+  color: var(--white) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.spts-public .spts-chat-me .spts-chat-bubble,
+.spts-public .spts-chat-me .spts-chat-bubble p,
+.spts-public .spts-chat-me .spts-chat-bubble span,
+.spts-public .spts-chat-me .spts-chat-bubble div {
+  color: #f4fbff !important;
+  background: rgba(34,211,238,.075) !important;
+}
+
+.spts-public .spts-chat-row:not(.spts-chat-me) .spts-chat-bubble {
+  color: #f5f7fa !important;
+  background: rgba(255,255,255,.035) !important;
+}
+
+.spts-public .spts-chat-meta,
+.spts-public .spts-chat-bubble .spts-chat-meta {
+  color: var(--muted) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.spts-public .spts-chat-compose textarea {
+  color: var(--white) !important;
+  -webkit-text-fill-color: var(--white) !important;
+  caret-color: var(--cyan);
+  opacity: 1 !important;
+}
+
+.spts-public .spts-chat-compose textarea::placeholder {
+  color: var(--muted) !important;
+  -webkit-text-fill-color: var(--muted) !important;
+  opacity: 1 !important;
+}
+
+.spts-public .spts-chat-head,
+.spts-public .spts-chat-head strong,
+.spts-public .spts-chat-head small {
+  color: var(--white);
+  opacity: 1;
+  visibility: visible;
+}
+
+.spts-public .spts-chat-foot,
+.spts-public .spts-chat-foot * {
+  color: var(--faint) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Keep buttons readable regardless of global button/text overrides. */
+.spts-public .spts-chat button {
+  color: var(--cyan) !important;
+  -webkit-text-fill-color: var(--cyan);
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.spts-public .spts-chat-send {
+  color: var(--cyan) !important;
+  background: transparent !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spts-public .spts-chat-bubble,
+  .spts-public .spts-chat-bubble p,
+  .spts-public .spts-chat-bubble span {
+    color: #f5f7fa !important;
+  }
+}
+
+
+/* ================================================================
+   HINTS, "SEE MORE", ICONS, GROWING FIELDS
+   ================================================================ */
+
+/* Inline SVG icons (replace emoji / symbol characters). */
+.spts-ico{width:1.05em;height:1.05em;flex:none;vertical-align:-.16em;overflow:visible;}
+
+/* Words and badges that explain themselves in a toast on tap / hover. */
+.spts-hint{cursor:help;}
+.spts-hint-word{border-bottom:1px dotted currentColor;}
+.spts-hint:focus-visible{outline:1px solid var(--cyan);outline-offset:2px;}
+
+/* "See more" / "See less" on long text: an inline link, not a button box. */
+.spts-page button.spts-clamp-btn,
+.spts-public button.spts-clamp-btn{
+  display:inline;min-height:0;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;
+  background:transparent!important;color:var(--cyan)!important;-webkit-text-fill-color:var(--cyan);
+  font:inherit;font-size:.9em;font-weight:500;letter-spacing:.02em;
+  text-decoration:underline;text-underline-offset:3px;
+}
+.spts-page button.spts-clamp-btn:hover,
+.spts-public button.spts-clamp-btn:hover{
+  border:0;box-shadow:none;background:transparent!important;
+  color:var(--white)!important;-webkit-text-fill-color:var(--white);
+}
+.spts-public.spts-premium button.spts-clamp-btn{color:#ffc55c!important;-webkit-text-fill-color:#ffc55c;}
+.spts-public.spts-premium button.spts-clamp-btn:hover{color:var(--white)!important;-webkit-text-fill-color:var(--white);}
+
+/* Character counter under comment fields. */
+.spts-field-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:4px;color:var(--faint);font-size:.66rem;}
+
+/* Comment and reply fields grow with their text (up to a cap), then scroll. */
+.spts-comments textarea,
+.spts-reply-form textarea{
+  flex:1 1 auto;min-width:0;min-height:38px;padding:9px 10px;
+  border:1px solid var(--line);border-radius:2px;background:rgba(6,6,15,.7);
+  color:var(--white);font:inherit;font-size:.8rem;line-height:1.45;
+  resize:none;overflow-y:auto;
+}
+.spts-comments textarea:focus,
+.spts-reply-form textarea:focus{outline:0;border-color:var(--cyan);}
+
+/* Portfolio viewer bar: buttons on the right (Copy link, and for Premium, Open in new tab). */
+.spts-ad-bar-actions{display:flex;align-items:center;gap:8px;}
+
+
+/* ================================================================
+   PUBLIC PROFILE LAYOUT
+   Desktop: the profile sits on the left; Posts / Message open on the right.
+   Mobile and tablet: the profile fills the screen and Posts / Message open
+   full screen. Structure only; the profile's own look is unchanged.
+   ================================================================ */
+
+/* Shared: the panel header (title + close) and the panel itself. */
+.spts-public .spts-profile-panel{min-width:0;animation:spts-panel-in .22s ease-out;}
+.spts-public .spts-panel-bar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin:0 0 16px;padding:0 0 14px;border-bottom:1px solid var(--line);
+}
+.spts-public .spts-panel-title{display:flex;align-items:center;gap:10px;min-width:0;}
+.spts-public .spts-panel-title h2{margin:0;color:var(--cyan);font-size:clamp(1.25rem,3vw,1.65rem);}
+.spts-public .spts-panel-title h2::before{content:'> ';color:var(--violet);}
+.spts-public button.spts-panel-close{
+  flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:40px;height:40px;min-height:40px;padding:0;
+}
+.spts-public .spts-profile-panel > .spts-card{margin:0;}
+.spts-public .spts-profile-panel-chat > .spts-chat{max-width:none;margin:0;}
+.spts-public .spts-profile-panel-chat .spts-chat-thread{
+  min-height:320px;max-height:min(56vh,560px);max-height:min(56dvh,560px);
+}
+@keyframes spts-panel-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+@keyframes spts-panel-up{from{transform:translateY(100%);}to{transform:none;}}
+@media (prefers-reduced-motion:reduce){.spts-public .spts-profile-panel{animation:none;}}
+
+/* Desktop: one column until a panel opens, then profile left / panel right. */
+.spts-public .spts-profile-layout{
+  display:grid;grid-template-columns:minmax(0,1fr);column-gap:56px;align-items:stretch;
+  min-height:max(440px,calc(100vh - 190px));min-height:max(440px,calc(100dvh - 190px));
+}
+.spts-public .spts-profile-layout .spts-profile-hero{min-height:0;margin-bottom:0;}
+
+@media (min-width:901px){
+  .spts-public .spts-profile-layout.spts-has-panel{
+    grid-template-columns:minmax(300px,380px) minmax(0,1fr);align-items:start;
+  }
+  .spts-public .spts-has-panel .spts-profile-hero{
+    position:sticky;top:24px;padding:30px 0 40px;border-bottom:0;
+  }
+  .spts-public .spts-has-panel .spts-profile-name{font-size:clamp(1.8rem,3vw,2.6rem);}
+}
+
+/* Mobile / tablet: the profile fills the screen; the panel is a full-screen layer. */
+@media (max-width:900px){
+  html.spts-panel-open,
+  html.spts-panel-open body{overflow:hidden;}
+
+  .spts-public{width:100%;max-width:none;margin:0;padding:0;}
+  .spts-public .spts-public-status{padding:40px 20px;}
+
+  .spts-public .spts-profile-layout{display:block;min-height:0;}
+  .spts-public .spts-profile-layout .spts-profile-hero{
+    min-height:100vh;min-height:100dvh;margin:0;
+    padding:calc(28px + env(safe-area-inset-top,0px)) 20px calc(28px + env(safe-area-inset-bottom,0px));
+    border-bottom:0;justify-content:center;
+  }
+  .spts-public .spts-profile-hero::before{top:calc(12px + env(safe-area-inset-top,0px));left:20px;}
+  .spts-public .spts-profile-hero::after{left:20px;bottom:0;}
+
+  .spts-public .spts-profile-panel{
+    position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;
+    background:var(--bg);animation:spts-panel-up .24s ease-out;
+  }
+  .spts-public .spts-panel-bar{
+    flex:none;margin:0;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px;
+  }
+  .spts-public .spts-profile-panel > .spts-card{
+    flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+    border:0;border-radius:0;background:transparent;
+    padding:16px 16px calc(24px + env(safe-area-inset-bottom,0px));
+  }
+  .spts-public .spts-profile-panel-chat > .spts-chat{
+    display:flex;flex-direction:column;overflow:hidden;
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+  }
+  .spts-public .spts-profile-panel-chat .spts-chat-thread{flex:1 1 auto;min-height:0;max-height:none;}
+  .spts-public .spts-profile-panel-chat .spts-chat-head,
+  .spts-public .spts-profile-panel-chat .spts-chat-compose,
+  .spts-public .spts-profile-panel-chat .spts-chat-foot,
+  .spts-public .spts-profile-panel-chat .spts-error-box{flex:none;}
+}
+
+
+/* Duration select in dashboard cards (portfolio upload). */
+.spts-page .spts-card select{padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;}
+.spts-page .spts-card select:focus{outline:none;border-color:var(--cyan);}
+.spts-page .spts-card select:disabled{opacity:.6;cursor:not-allowed;}
+
+
+/* Public profile picture: tap to view full screen (reuses the lightbox). */
+.spts-public button.spts-avatar-btn,
+.spts-public button.spts-avatar-btn:hover,
+.spts-public button.spts-avatar-btn:active{
+  display:block;min-height:0;margin:0 0 22px;padding:0;border:0;border-radius:50%;
+  background:transparent;box-shadow:none;line-height:0;cursor:zoom-in;transform:none;
+}
+.spts-public button.spts-avatar-btn .spts-avatar-lg{display:block;margin:0;}
+.spts-public button.spts-avatar-btn:focus-visible{outline:1px solid var(--cyan);outline-offset:4px;}
+
+
+/* ================================================================
+   HELP: subtle "Help?" button + the dashboard tour
+   ================================================================ */
+.spts-page button.spts-help-btn,
+.spts-public button.spts-help-btn{
+  min-height:0;padding:4px 8px;border:0;border-radius:2px;background:transparent;box-shadow:none;
+  color:var(--faint);font-size:.72rem;letter-spacing:.04em;
+  text-decoration:underline dotted;text-underline-offset:3px;cursor:help;
+}
+.spts-page button.spts-help-btn:hover,
+.spts-public button.spts-help-btn:hover{border:0;background:transparent;box-shadow:none;color:var(--cyan);}
+.spts-page button.spts-help-btn:focus-visible,
+.spts-public button.spts-help-btn:focus-visible{outline:1px solid var(--cyan);outline-offset:2px;}
+
+.spts-header-actions{display:flex;align-items:center;gap:8px;}
+.spts-public .spts-profile-hero .spts-help-btn{position:absolute;top:8px;right:0;z-index:2;}
+@media (max-width:900px){
+  .spts-public .spts-profile-hero .spts-help-btn{top:calc(8px + env(safe-area-inset-top,0px));right:12px;}
+}
+
+.spts-tour-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
+.spts-tour-count{color:#bcaeff;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;}
+.spts-page button.spts-tour-close{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;padding:0;}
+.spts-tour .spts-modal-body p{margin:0 0 8px;line-height:1.6;}
+.spts-tour .spts-tour-action{margin-top:6px;}
+.spts-tour-dots{display:flex;justify-content:center;gap:6px;margin:16px 0 0;}
+.spts-tour-dots span{width:6px;height:6px;border-radius:50%;background:var(--line);}
+.spts-tour-dots span.on{background:var(--cyan);}
+
+
+/* ================================================================
+   SETTINGS DROPDOWN + QUIET TIPS
+   ================================================================ */
+.spts-tip{cursor:default;}
+
+.spts-settings{position:relative;}
+.spts-settings > button{display:inline-flex;align-items:center;gap:6px;}
+.spts-page .spts-settings-menu{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:60;min-width:170px;
+  display:grid;gap:2px;padding:4px;
+  background:var(--bg);border:1px solid var(--line);border-radius:2px;box-shadow:0 16px 40px rgba(0,0,0,.5);
+}
+.spts-page .spts-settings-menu button{
+  min-height:0;padding:10px 12px;border:0;border-radius:2px;background:transparent;box-shadow:none;
+  color:var(--white);text-align:left;font-size:.82rem;
+}
+.spts-page .spts-settings-menu button:hover,
+.spts-page .spts-settings-menu button:focus-visible{background:rgba(34,211,238,.08);color:var(--cyan);border:0;box-shadow:none;}
+
+
+/* ================================================================
+   SHARE PROFILE (dashboard)
+   ================================================================ */
+.spts-share-preview{
+  margin:0 0 12px;padding:12px;max-height:40vh;max-height:40dvh;overflow:auto;
+  border:1px solid var(--line);border-left:2px solid var(--cyan);border-radius:2px;background:rgba(34,211,238,.035);
+  color:var(--white);font-size:.82rem;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.spts-share-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:12px 0 8px;}
+.spts-share-actions > *{text-align:center;justify-content:center;}
+
+
+/* ================================================================
+   PORTFOLIO VIEWER: "Full screen" hides the page's frames (not the browser's fullscreen)
+   ================================================================ */
+html.spts-ad-bare,
+html.spts-ad-bare body{overflow:hidden;}
+.spts-ad.spts-ad-bare{
+  position:fixed;inset:0;z-index:900;display:block;
+  width:100%;height:100%;min-height:0;margin:0;padding:0;border:0;background:var(--bg);
+}
+.spts-ad.spts-ad-bare .spts-ad-frame{
+  position:absolute;inset:0;display:block;width:100%;height:100%;min-height:0;
+  margin:0;border:0;border-radius:0;
+}
+.spts-ad button.spts-ad-exit{
+  position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:12px;z-index:920;
+  display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;
+  border:1px solid rgba(255,255,255,.28);border-radius:50%;
+  background:rgba(6,6,15,.72);color:#fff;cursor:pointer;opacity:.8;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+}
+.spts-ad button.spts-ad-exit:hover,
+.spts-ad button.spts-ad-exit:focus-visible{opacity:1;border-color:var(--cyan);color:var(--cyan);outline:0;}
+
+
+/* QR code (dashboard) */
+.spts-qr-canvas{display:block;width:min(260px,100%);height:auto;margin:0 auto 10px;background:#fff;image-rendering:pixelated;}
+.spts-qr-link{text-align:center;overflow-wrap:anywhere;font-size:.74rem;}
+
+
+/* Portfolio card (dashboard): Upload / Request tabs for Premium */
+.spts-seg{display:flex;margin:0 0 14px;border:1px solid var(--line);border-radius:2px;overflow:hidden;}
+.spts-page .spts-seg button{flex:1;min-height:0;padding:9px 10px;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--muted);font-size:.8rem;}
+.spts-page .spts-seg button:hover{background:rgba(34,211,238,.06);color:var(--white);border:0;box-shadow:none;}
+.spts-page .spts-seg button.on{background:rgba(34,211,238,.1);color:var(--cyan);}
+.spts-portfolio-badge{margin:0 0 8px;}
+
+
+/* Dashboard overview (shown when no card is open) */
+.spts-overview-h{margin:16px 0 8px;color:#bcaeff;font-size:.68rem;font-weight:400;letter-spacing:.08em;text-transform:uppercase;}
+.spts-overview-list{list-style:none;margin:0;padding:0;display:grid;gap:8px;}
+.spts-overview-item{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:10px 12px;border:1px solid var(--line);border-left:2px solid var(--cyan);border-radius:2px;
+  background:rgba(34,211,238,.03);color:var(--muted);font-size:.84rem;line-height:1.5;
+}
+.spts-overview-item > span{flex:1 1 220px;min-width:0;}
+.spts-page .spts-overview-item button{min-height:0;padding:6px 12px;font-size:.74rem;}
+
+/* Sign-up: Terms of Service / Privacy Notice note and reader (Firestore legal/resources). */
+.spts-legal-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.6;
+}
+
+.spts-page .spts-legal-note .spts-legal-link {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--cyan);
+  font: inherit;
+  letter-spacing: normal;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.spts-page .spts-legal-note .spts-legal-link:hover {
+  background: none;
+  box-shadow: none;
+  color: var(--white);
+}
+
+.spts-legal-body {
+  align-content: start;
+  gap: 10px;
+  max-height: calc(100vh - 220px);
+  max-height: calc(100dvh - 220px);
+  overflow-y: auto;
+  padding-right: 6px;
+  overflow-wrap: anywhere;
+}
+
+.spts-legal-body p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.spts-legal-body .spts-legal-h {
+  margin-top: 8px;
+}
+
+.spts-legal-body .spts-legal-err {
+  color: #ff6b81;
+  font-size: .82rem;
+}
+
+/* Public profile: Share profile / Get your own profile. Clearly tappable buttons for visitors
+   (the owner sees none; a signed-in visitor sees Share only; a signed-out visitor sees both). */
+.spts-public .spts-hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.spts-public .spts-hero-cta .spts-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 18px;
+  border: 1px solid var(--cyan);
+  border-radius: 999px;
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.spts-public .spts-hero-cta .spts-cta .spts-ico {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.spts-public .spts-hero-cta .spts-cta-secondary {
+  background: rgba(34,211,238,.08);
+  color: var(--cyan);
+}
+
+.spts-public .spts-hero-cta .spts-cta-secondary:hover {
+  background: rgba(34,211,238,.16);
+  color: var(--white);
+}
+
+.spts-public .spts-hero-cta a.spts-cta.spts-cta-primary {
+  background: var(--cyan);
+  color: #06060f;
+}
+
+.spts-public .spts-hero-cta a.spts-cta.spts-cta-primary:hover {
+  background: var(--white);
+  border-color: var(--white);
+  color: #06060f;
+}
+
+.spts-public .spts-hero-cta .spts-cta:active {
+  transform: translateY(1px);
+}
+
+.spts-public .spts-hero-cta .spts-cta:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
+}
+
+/* Premium profiles keep the gold theme. */
+.spts-public.spts-premium .spts-hero-cta .spts-cta {
+  border-color: #ffc55c;
+}
+
+.spts-public.spts-premium .spts-hero-cta .spts-cta-secondary {
+  background: rgba(255,197,92,.08);
+  color: #ffc55c;
+}
+
+.spts-public.spts-premium .spts-hero-cta .spts-cta-secondary:hover {
+  background: rgba(255,197,92,.16);
+  color: #ffc55c;
+}
+
+.spts-public.spts-premium .spts-hero-cta a.spts-cta.spts-cta-primary {
+  background: linear-gradient(120deg,#ffc55c,#ff8a3d);
+  border-color: transparent;
+  color: #241300;
+}
+
+.spts-public.spts-premium .spts-hero-cta a.spts-cta.spts-cta-primary:hover {
+  background: linear-gradient(120deg,#ffd27f,#ff9a58);
+  color: #241300;
+}
+
+@media (max-width: 560px) {
+  .spts-public .spts-hero-cta .spts-cta {
+    flex: 1 1 100%;
+  }
+}
