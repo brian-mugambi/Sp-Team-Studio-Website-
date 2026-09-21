@@ -232,6 +232,7 @@ const HINTS={
  noPhoto:"This profile has no photo yet.",
  postsPublic:"Posts this person has shared on their profile.",
  shareOwn:"Writes a ready-to-send message with your profile link, copies it, and opens WhatsApp, email and more.",
+ qrOwn:"Makes a QR code that opens your public profile. Download it as an image to print or post.",
 } as const;
 type HintKey=keyof typeof HINTS;
 
@@ -1138,6 +1139,10 @@ function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>
   title:"Share your profile",
   body:<p>Tap <b>Share profile</b>, type the person's name, and the message is written for you and copied. Then send it through WhatsApp, Telegram, Facebook, email or any other app on your device.</p>,
  });
+ if(profile)steps.push({
+  title:"QR code",
+  body:<p>Tap <b>QR code</b> to get a scannable image of your profile link. Download it as a PNG to print on a card or post online. It contains only your profile link.</p>,
+ });
  steps.push(
   {title:"Contact buttons",body:<p>The website, email and phone you add show as <b>Website</b>, <b>Email</b> and <b>Phone</b> buttons on your public profile. You can fill any you left empty from <b>Edit</b>.</p>},
   {title:"Add posts",body:<p>Posts appear on your public profile. Paste a photo or video link{premium?", or upload a file":" (Premium members can upload files)"}, add an optional caption, then tap <b>Add post</b>. You can keep up to {MAX_POSTS}. Manage or delete posts from your public profile.</p>},
@@ -1155,6 +1160,241 @@ function dashboardTourSteps(o:{profile:any|null;premium:boolean;showProfile:()=>
   {title:"Need a hand?",body:<p>For anything this tour didn't cover, contact support.</p>,action:{label:"Contact support",href:supportUrl("Hi, I need help with my profile."),external:true}},
  );
  return steps;
+}
+
+/* ------------------------------------------------------------------ *
+ * QR code (no library). Byte mode, error correction level M, versions 1-10 (up to 213 characters).
+ * Follows the QR Code Model 2 spec; the layout mirrors the well-known public-domain style reference
+ * implementations. qrMatrix() returns rows of dark(true)/light(false) modules.
+ * ------------------------------------------------------------------ */
+const QR_ECC_PER_BLOCK=[0,10,16,26,18,24,16,18,22,22,26];   // level M, index = version
+const QR_NUM_BLOCKS=[0,1,1,1,2,2,4,4,4,5,5];                  // level M, index = version
+const QR_MAX_VERSION=10;
+
+function qrRawModules(ver:number):number{
+ let r=(16*ver+128)*ver+64;
+ if(ver>=2){ const n=Math.floor(ver/7)+2; r-=(25*n-10)*n-55; if(ver>=7)r-=36; }
+ return r;
+}
+const qrDataCodewords=(ver:number)=>Math.floor(qrRawModules(ver)/8)-QR_ECC_PER_BLOCK[ver]*QR_NUM_BLOCKS[ver];
+
+function rsMul(x:number,y:number):number{
+ let z=0;
+ for(let i=7;i>=0;i--){ z=(z<<1)^((z>>>7)*0x11D); z^=((y>>>i)&1)*x; }
+ return z;
+}
+function rsDivisor(degree:number):number[]{
+ const r=new Array<number>(degree).fill(0);
+ r[degree-1]=1;
+ let root=1;
+ for(let i=0;i<degree;i++){
+  for(let j=0;j<r.length;j++){ r[j]=rsMul(r[j],root); if(j+1<r.length)r[j]^=r[j+1]; }
+  root=rsMul(root,2);
+ }
+ return r;
+}
+function rsRemainder(data:number[],div:number[]):number[]{
+ const r=div.map(()=>0);
+ for(const b of data){
+  const f=b^(r.shift() as number);
+  r.push(0);
+  div.forEach((c,i)=>{ r[i]^=rsMul(c,f); });
+ }
+ return r;
+}
+
+function qrMatrix(text:string):boolean[][]{
+ const bytes=Array.from(new TextEncoder().encode(text));
+ // pick the smallest version that fits
+ let ver=1;
+ for(;;ver++){
+  if(ver>QR_MAX_VERSION)throw new Error("Text too long for the QR code.");
+  if(4+(ver<=9?8:16)+8*bytes.length<=qrDataCodewords(ver)*8)break;
+ }
+ // data bits: mode (byte), length, bytes, terminator, padding
+ const bits:number[]=[];
+ const put=(v:number,n:number)=>{ for(let i=n-1;i>=0;i--)bits.push((v>>>i)&1); };
+ put(4,4);put(bytes.length,ver<=9?8:16);bytes.forEach(b=>put(b,8));
+ const cap=qrDataCodewords(ver)*8;
+ put(0,Math.min(4,cap-bits.length));
+ put(0,(8-bits.length%8)%8);
+ for(let pad=0xEC;bits.length<cap;pad^=0xEC^0x11)put(pad,8);
+ const data:number[]=[];
+ for(let i=0;i<bits.length;i+=8){ let v=0; for(let j=0;j<8;j++)v=(v<<1)|bits[i+j]; data.push(v); }
+
+ // error correction + interleave
+ const nb=QR_NUM_BLOCKS[ver],eccLen=QR_ECC_PER_BLOCK[ver];
+ const raw=Math.floor(qrRawModules(ver)/8);
+ const shortBlocks=nb-raw%nb,shortLen=Math.floor(raw/nb);
+ const div=rsDivisor(eccLen);
+ const blocks:number[][]=[];
+ for(let i=0,k=0;i<nb;i++){
+  const dat=data.slice(k,k+shortLen-eccLen+(i<shortBlocks?0:1));
+  k+=dat.length;
+  const ecc=rsRemainder(dat,div);
+  if(i<shortBlocks)dat.push(0);
+  blocks.push(dat.concat(ecc));
+ }
+ const all:number[]=[];
+ for(let i=0;i<blocks[0].length;i++)blocks.forEach((b,j)=>{ if(i!==shortLen-eccLen||j>=shortBlocks)all.push(b[i]); });
+
+ // function patterns
+ const size=ver*4+17;
+ const mod:boolean[][]=Array.from({length:size},()=>new Array<boolean>(size).fill(false));
+ const fn:boolean[][]=Array.from({length:size},()=>new Array<boolean>(size).fill(false));
+ const setFn=(x:number,y:number,dark:boolean)=>{ mod[y][x]=dark;fn[y][x]=true; };
+ for(let i=0;i<size;i++){ setFn(6,i,i%2===0);setFn(i,6,i%2===0); }
+ const finder=(cx:number,cy:number)=>{
+  for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){
+   const d=Math.max(Math.abs(dx),Math.abs(dy)),x=cx+dx,y=cy+dy;
+   if(x>=0&&x<size&&y>=0&&y<size)setFn(x,y,d!==2&&d!==4);
+  }
+ };
+ finder(3,3);finder(size-4,3);finder(3,size-4);
+ if(ver>1){
+  const n=Math.floor(ver/7)+2;
+  const step=Math.ceil((ver*4+4)/(n*2-2))*2;
+  const pos=[6];
+  for(let p=size-7;pos.length<n;p-=step)pos.splice(1,0,p);
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+   if((i===0&&j===0)||(i===0&&j===n-1)||(i===n-1&&j===0))continue;
+   for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)setFn(pos[i]+dx,pos[j]+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1);
+  }
+ }
+ const formatBits=(mask:number)=>{
+  const d=(0<<3)|mask; // level M = 0
+  let rem=d;
+  for(let i=0;i<10;i++)rem=(rem<<1)^((rem>>>9)*0x537);
+  const bits=((d<<10)|rem)^0x5412;
+  const b=(i:number)=>((bits>>>i)&1)!==0;
+  for(let i=0;i<=5;i++)setFn(8,i,b(i));
+  setFn(8,7,b(6));setFn(8,8,b(7));setFn(7,8,b(8));
+  for(let i=9;i<15;i++)setFn(14-i,8,b(i));
+  for(let i=0;i<8;i++)setFn(size-1-i,8,b(i));
+  for(let i=8;i<15;i++)setFn(8,size-15+i,b(i));
+  setFn(8,size-8,true);
+ };
+ formatBits(0);
+ if(ver>=7){
+  let rem=ver;
+  for(let i=0;i<12;i++)rem=(rem<<1)^((rem>>>11)*0x1F25);
+  const bits=(ver<<12)|rem;
+  for(let i=0;i<18;i++){
+   const bit=((bits>>>i)&1)!==0,a=size-11+i%3,b=Math.floor(i/3);
+   setFn(a,b,bit);setFn(b,a,bit);
+  }
+ }
+
+ // place codewords in the zigzag
+ let bi=0;
+ for(let right=size-1;right>=1;right-=2){
+  if(right===6)right=5;
+  for(let vert=0;vert<size;vert++)for(let j=0;j<2;j++){
+   const x=right-j,upward=((right+1)&2)===0,y=upward?size-1-vert:vert;
+   if(!fn[y][x]&&bi<all.length*8){ mod[y][x]=((all[bi>>>3]>>>(7-(bi&7)))&1)!==0; bi++; }
+  }
+ }
+
+ // choose the mask with the lowest penalty
+ const applyMask=(mask:number)=>{
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+   let inv:boolean;
+   switch(mask){
+    case 0:inv=(x+y)%2===0;break;
+    case 1:inv=y%2===0;break;
+    case 2:inv=x%3===0;break;
+    case 3:inv=(x+y)%3===0;break;
+    case 4:inv=(Math.floor(x/3)+Math.floor(y/2))%2===0;break;
+    case 5:inv=x*y%2+x*y%3===0;break;
+    case 6:inv=(x*y%2+x*y%3)%2===0;break;
+    default:inv=((x+y)%2+x*y%3)%2===0;
+   }
+   if(!fn[y][x]&&inv)mod[y][x]=!mod[y][x];
+  }
+ };
+ const penalty=():number=>{
+  let p=0;
+  const line=(get:(i:number)=>boolean)=>{
+   let run=1;
+   for(let i=1;i<size;i++){
+    if(get(i)===get(i-1)){ run++; if(run===5)p+=3; else if(run>5)p++; } else run=1;
+   }
+   // finder-like 1:1:3:1:1 with a light border on either side
+   for(let i=0;i+11<=size;i++){
+    const a=[1,0,1,1,1,0,1,0,0,0,0],b=[0,0,0,0,1,0,1,1,1,0,1];
+    let ma=true,mb=true;
+    for(let k=0;k<11;k++){ const v=get(i+k)?1:0; if(v!==a[k])ma=false; if(v!==b[k])mb=false; }
+    if(ma||mb)p+=40;
+   }
+  };
+  for(let y=0;y<size;y++)line(i=>mod[y][i]);
+  for(let x=0;x<size;x++)line(i=>mod[i][x]);
+  for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){
+   const c=mod[y][x];
+   if(c===mod[y][x+1]&&c===mod[y+1][x]&&c===mod[y+1][x+1])p+=3;
+  }
+  let dark=0;
+  for(const row of mod)for(const c of row)if(c)dark++;
+  p+=Math.floor(Math.abs(dark*20-size*size*10)/(size*size))*10; // balance of dark and light
+  return p;
+ };
+ let best=0,bestP=Infinity;
+ for(let m=0;m<8;m++){
+  applyMask(m);formatBits(m);
+  const p=penalty();
+  if(p<bestP){best=m;bestP=p;}
+  applyMask(m); // undo (XOR)
+ }
+ applyMask(best);formatBits(best);
+ return mod;
+}
+
+// QR code for the public profile link (and nothing else), downloadable as profile-{username}.png.
+function QrModal({profile,onClose}:{profile:any;onClose:()=>void}){
+ const canvasRef=useRef<HTMLCanvasElement>(null);
+ const [err,setErr]=useState("");
+ const url=`${location.origin}/profile/${profile.username}`;
+ useEffect(()=>{
+  const onKey=(e:KeyboardEvent)=>{ if(e.key==="Escape")onClose(); };
+  window.addEventListener("keydown",onKey);
+  return ()=>window.removeEventListener("keydown",onKey);
+ },[onClose]);
+ useEffect(()=>{
+  try{
+   const m=qrMatrix(url),quiet=4,n=m.length+quiet*2;
+   const scale=Math.max(8,Math.floor(1024/n)); // whole pixels per module keeps the edges sharp
+   const c=canvasRef.current;if(!c)return;
+   c.width=c.height=n*scale;
+   const g=c.getContext("2d");if(!g)return;
+   g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);
+   g.fillStyle="#000";
+   m.forEach((row,y)=>row.forEach((dark,x)=>{ if(dark)g.fillRect((x+quiet)*scale,(y+quiet)*scale,scale,scale); }));
+   setErr("");
+  }catch{ setErr("Couldn't make a QR code for this link."); }
+ },[url]);
+ function download(){
+  canvasRef.current?.toBlob(b=>{
+   if(!b)return;
+   const href=URL.createObjectURL(b);
+   const a=document.createElement("a");
+   a.href=href;a.download=`profile-${profile.username}.png`;
+   document.body.appendChild(a);a.click();a.remove();
+   setTimeout(()=>URL.revokeObjectURL(href),1000);
+  },"image/png");
+ }
+ return <div className="spts-modal-backdrop" role="dialog" aria-modal="true" aria-label="QR code" onClick={onClose}>
+  <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
+   <h3 className="spts-modal-title">Your QR code</h3>
+   <div className="spts-modal-body">
+    {err?<p className="spts-muted">{err}</p>:<canvas ref={canvasRef} className="spts-qr-canvas" role="img" aria-label={`QR code for ${url}`}/>}
+    <p className="spts-muted spts-qr-link">Scanning it opens {url}</p>
+   </div>
+   <div className="spts-modal-actions">
+    <button type="button" className="spts-ghost" onClick={onClose}>Close</button>
+    {!err&&<button type="button" onClick={download}>Download PNG</button>}
+   </div>
+  </div>
+ </div>;
 }
 
 // Share profile: asks who it's for, writes the message with their name and your link, copies it, and offers
@@ -1330,7 +1570,7 @@ function Dashboard({user}:{user:User}){
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [flagged,setFlagged]=useState(false); // signed-in UID not found in its profile: restricted account
  const [addingPost,setAddingPost]=useState(false);
- const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false);
+ const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false),[qrOpen,setQrOpen]=useState(false);
  const [delFails,setDelFails]=useState(()=>readDelFails(user.uid));
  const hint=useHint();const showHint=hint.show;
  const lockedTap=()=>showHint("lockedField");
@@ -1477,6 +1717,7 @@ function Dashboard({user}:{user:User}){
    <SettingsMenu onAccount={()=>setAccountOpen(true)} onHelp={()=>setTourOpen(true)} onSignOut={()=>signOut(profileAuth)}/>
   </div>
  </header>
+ {qrOpen&&profile&&<QrModal profile={profile} onClose={()=>setQrOpen(false)}/>}
  {shareOpen&&profile&&<ShareProfileModal profile={profile} onClose={()=>setShareOpen(false)}/>}
  {accountOpen&&<AccountModal user={user} profile={profile} delFails={delFails} busy={deletingProfile} onDelete={deleteProfileOnly} onClose={()=>setAccountOpen(false)}/>}
  {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setProfileOpen(true),showInbox:()=>setInboxOpen(true)})} onClose={()=>setTourOpen(false)}/>}
@@ -1485,6 +1726,7 @@ function Dashboard({user}:{user:User}){
   {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setProfileOpen(o=>!o)}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
   <button type="button" aria-expanded={inboxOpen} onClick={()=>setInboxOpen(o=>!o)}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
   {profile&&!flagged&&<button type="button" onClick={()=>setShareOpen(true)} {...hint.props("shareOwn")}>Share profile</button>}
+  {profile&&!flagged&&<button type="button" onClick={()=>setQrOpen(true)} {...hint.props("qrOwn")}>QR code</button>}
  </div>
 
  {flagged&&<section className="spts-card">
@@ -2281,6 +2523,7 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  const [premium,setPremium]=useState<boolean|null>(()=>typeof window!=="undefined"?readPremiumCache(uname):null);
  const [settled,setSettled]=useState(false),[failed,setFailed]=useState(false),[failedText,setFailedText]=useState(ACCESS_GENERIC),[tries,setTries]=useState(0);
  const [copied,setCopied]=useState(false);
+ const [bare,setBare]=useState(false); // "full screen": hides the bar and frame; the portfolio fills the window
  const toast=useToast();const confirm=useConfirm();
  async function copyLink(){
   try{
@@ -2307,6 +2550,16 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
  },[uname,tries]);
 
  const live=!!ad&&adPhase(ad,todayLocal())==="live";
+ const bareOn=bare&&live;
+ // Not the browser's Fullscreen API: this only hides the page's own frames. A floating X (or Esc) brings them back.
+ useEffect(()=>{
+  if(!bareOn)return;
+  const el=document.documentElement;
+  el.classList.add("spts-ad-bare");
+  const onKey=(e:KeyboardEvent)=>{ if(e.key==="Escape")setBare(false); };
+  document.addEventListener("keydown",onKey);
+  return ()=>{el.classList.remove("spts-ad-bare");document.removeEventListener("keydown",onKey);};
+ },[bareOn]);
 
  // Optional, Premium portfolios only, and only when the visitor taps it. The saved html is turned into a
  // local blob: page on this device and opened in a new tab, outside the sandbox. That page shares this
@@ -2326,14 +2579,15 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
   }catch{ toast("error","Couldn't open the portfolio in a new tab."); }
  }
 
- return <main className="spts-ad">
-  <header className="spts-ad-bar">
+ return <main className={`spts-ad${bareOn?" spts-ad-bare":""}`}>
+  {!bareOn&&<header className="spts-ad-bar">
    <a className="spts-ghost spts-link-btn" href={`/profile/${uname}`}><Ico d={ICON.back}/> @{uname}</a>
    <div className="spts-ad-bar-actions">
+    {live&&<button type="button" className="spts-ghost" onClick={()=>setBare(true)}>Full screen</button>}
     <button type="button" className="spts-ghost" onClick={copyLink}>{copied?<><Ico d={ICON.check}/> Copied</>:"Copy link"}</button>
     {live&&premium===true&&<button type="button" className="spts-ghost" onClick={openLocally}>Open in new tab</button>}
    </div>
-  </header>
+  </header>}
   {live&&<iframe
    className="spts-ad-frame"
    title={`Portfolio by @${uname}`}
@@ -2341,6 +2595,7 @@ function AdView({username,user,authLoading}:{username:string;user:User|null;auth
    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
    referrerPolicy="no-referrer"
   />}
+  {bareOn&&<button type="button" className="spts-ad-exit" aria-label="Exit full screen" title="Exit full screen" onClick={()=>setBare(false)}><Ico d={ICON.close}/></button>}
   {!live&&!settled&&<div className="spts-ad-frame spts-ad-blank"/>}
   {!live&&settled&&!failed&&<div className="spts-public-status">
    <h1>Portfolio not found</h1>

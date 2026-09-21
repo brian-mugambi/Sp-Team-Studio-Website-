@@ -2146,3 +2146,32 @@ button.spts-upgrade-btn:disabled{opacity:0.7;cursor:default;}
 }
 .spts-share-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:12px 0 8px;}
 .spts-share-actions > *{text-align:center;justify-content:center;}
+
+
+/* ================================================================
+   PORTFOLIO VIEWER: "Full screen" hides the page's frames (not the browser's fullscreen)
+   ================================================================ */
+html.spts-ad-bare,
+html.spts-ad-bare body{overflow:hidden;}
+.spts-ad.spts-ad-bare{
+  position:fixed;inset:0;z-index:900;display:block;
+  width:100%;height:100%;min-height:0;margin:0;padding:0;border:0;background:var(--bg);
+}
+.spts-ad.spts-ad-bare .spts-ad-frame{
+  position:absolute;inset:0;display:block;width:100%;height:100%;min-height:0;
+  margin:0;border:0;border-radius:0;
+}
+.spts-ad button.spts-ad-exit{
+  position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:12px;z-index:920;
+  display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;
+  border:1px solid rgba(255,255,255,.28);border-radius:50%;
+  background:rgba(6,6,15,.72);color:#fff;cursor:pointer;opacity:.8;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+}
+.spts-ad button.spts-ad-exit:hover,
+.spts-ad button.spts-ad-exit:focus-visible{opacity:1;border-color:var(--cyan);color:var(--cyan);outline:0;}
+
+
+/* QR code (dashboard) */
+.spts-qr-canvas{display:block;width:min(260px,100%);height:auto;margin:0 auto 10px;background:#fff;image-rendering:pixelated;}
+.spts-qr-link{text-align:center;overflow-wrap:anywhere;font-size:.74rem;}
