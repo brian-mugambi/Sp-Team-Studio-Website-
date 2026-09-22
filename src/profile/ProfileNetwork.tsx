@@ -110,17 +110,29 @@ function ErrText({text}:{text:string}){
  return <>Still not working. <a className="spts-link" href={supportUrl(`Hi, something keeps going wrong on my account${_lastAccessCode?` (${_lastAccessCode})`:""}. Can you help?`)} target="_blank" rel="noreferrer">Contact support</a> for help.</>;
 }
 
-const flaggedError=()=>Object.assign(new Error("account-flagged"),{code:"spts/account-flagged"});
+const flaggedError=(restrictionCount:number)=>Object.assign(new Error("account-flagged"),{code:"spts/account-flagged",restrictionCount});
 const isFlagged=(x:any)=>x?.code==="spts/account-flagged";
 type Standing={state:"new"}|{state:"ok";username:string;profile:any};
-// users/{uid} -> username -> profiles/{username}, whose uid must equal the signed-in uid.
-// No users/{uid} at all = a new sign-up that hasn't created a profile yet (normal, not flagged).
+/* users/{uid} -> username -> profiles/{username}, whose uid must equal the signed-in uid.
+ * No users/{uid} at all = a new sign-up that hasn't created a profile yet (normal, not flagged).
+ *
+ * Restriction history lives on profiles/{username} itself, set by hand in the Firestore console
+ * (same manual pattern as flagging — changing/removing the doc's uid — and as ad-request
+ * fulfilment) alongside whatever breaks the uid link:
+ *   restricted: true while a restriction is currently active; set back to false on review.
+ *   restrictionCount: how many times ever restricted (increment by 1 each new restriction; never
+ *     decrement — it's a permanent history, and 2+ means "repeat offender" from then on).
+ *   resolvedNotice: set true when a restriction is lifted, so the owner's next dashboard visit
+ *     shows a one-time "reviewed, restrictions removed" notice; the client clears it after showing it.
+ * A repeat offender (restricted && restrictionCount>=2) also loses their public profile —
+ * PublicProfile below refuses to show it, exactly as if it didn't exist.
+ */
 async function checkAccount(user:User):Promise<Standing>{
  const us=await getDoc(doc(profileDb,"users",user.uid));
  if(!us.exists())return {state:"new"};
  const uname:string=us.data().username;
  const pf=uname?await getDoc(doc(profileDb,"profiles",uname)):null;
- if(!pf||!pf.exists()||pf.data().uid!==user.uid)throw flaggedError();
+ if(!pf||!pf.exists()||pf.data().uid!==user.uid)throw flaggedError(pf?.exists()?Number(pf.data().restrictionCount)||1:1);
  return {state:"ok",username:uname,profile:pf.data()};
 }
 async function requireLinkedProfile(user:User):Promise<string>{
@@ -132,12 +144,15 @@ async function requireLinkedProfile(user:User):Promise<string>{
 // Edit these two lists to match what really is / isn't affected.
 const FLAG_AFFECTED=["Editing or managing your profile","Posts, and messaging through public profile","Premium upgrade and some features"];
 const FLAG_STILL_OK=["Logging in and out","Viewing other people's public profiles","Sending messages and comments on other profiles","Your public profile and portfolio"];
-function AccountFlagNotice({uid,showSupport=true}:{uid?:string;showSupport?:boolean}){
+function AccountFlagNotice({uid,restrictionCount=1,showSupport=true}:{uid?:string;restrictionCount?:number;showSupport?:boolean}){
+ const repeat=restrictionCount>=2;
  const [legalOpen,setLegalOpen]=useState(false);
  return <div className="spts-flag-notice" role="alert">
-  <p>Your account has been restricted for violating our <button type="button" className="spts-legal-link" onClick={()=>setLegalOpen(true)}>Terms of Service</button>, and is pending review.</p>
-  <div><span className="spts-flag-h">May not work</span><ul>{FLAG_AFFECTED.map(t=><li key={t}>{t}</li>)}</ul></div>
-  <div><span className="spts-flag-h spts-flag-ok">Still available</span><ul>{FLAG_STILL_OK.map(t=><li key={t}>{t}</li>)}</ul></div>
+  {repeat
+   ?<p>Your account has been restricted again for repeatedly violating our <button type="button" className="spts-legal-link" onClick={()=>setLegalOpen(true)}>Terms of Service</button>. At this stage nothing is accessible, including your public profile — visitors can't see it either.</p>
+   :<><p>Your account has been restricted for violating our <button type="button" className="spts-legal-link" onClick={()=>setLegalOpen(true)}>Terms of Service</button>, and is pending review.</p>
+     <div><span className="spts-flag-h">May not work</span><ul>{FLAG_AFFECTED.map(t=><li key={t}>{t}</li>)}</ul></div>
+     <div><span className="spts-flag-h spts-flag-ok">Still available</span><ul>{FLAG_STILL_OK.map(t=><li key={t}>{t}</li>)}</ul></div></>}
   <p>Please re-read our <button type="button" className="spts-legal-link" onClick={()=>setLegalOpen(true)}>Terms of Service</button>{showSupport&&<>, then <a className="spts-link" href={supportUrl(`Hi, my account is showing as restricted and I'd like it reviewed.${uid?` Account ID: ${uid}`:""}`)} target="_blank" rel="noreferrer">contact support</a> for review</>}.</p>
   {legalOpen&&<LegalModal kind="terms" onClose={()=>setLegalOpen(false)}/>}
  </div>;
@@ -1720,6 +1735,8 @@ function Dashboard({user}:{user:User}){
  const [savingProfile,setSavingProfile]=useState(false);
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [flagged,setFlagged]=useState(false); // signed-in UID not found in its profile: restricted account
+ const [restrictionCount,setRestrictionCount]=useState(1); // 1 = first offense, 2+ = repeat offender
+ const [resolvedNotice,setResolvedNotice]=useState(false); // shows once after a restriction is lifted
  const [addingPost,setAddingPost]=useState(false);
  const [openCard,setOpenCard]=useState<null|"profile"|"inbox"|"portfolio"|"posts">(null); // only one dashboard card open at a time
  const profileOpen=openCard==="profile",inboxOpen=openCard==="inbox",portfolioOpen=openCard==="portfolio",postsCardOpen=openCard==="posts";
@@ -1766,9 +1783,17 @@ function Dashboard({user}:{user:User}){
   try{
    // Runs every time the dashboard opens: the signed-in UID must be found in its profile.
    const st=await checkAccount(user);
-   if(st.state==="ok"){const d=st.profile;setProfile(d);setU(d.username);setName(d.displayName);setBio(d.bio);setPhoto(d.photoUrl);setWeb(d.websiteUrl);setEmail(d.email);setPhone(d.phone);setEditing(false)}
+   if(st.state==="ok"){
+    const d=st.profile;
+    setProfile(d);setU(d.username);setName(d.displayName);setBio(d.bio);setPhoto(d.photoUrl);setWeb(d.websiteUrl);setEmail(d.email);setPhone(d.phone);setEditing(false);
+    // A restriction was just lifted (set by hand in Firestore on review): show the one-time notice, then clear the flag.
+    if(d.resolvedNotice){
+     setResolvedNotice(true);
+     setDoc(doc(profileDb,"profiles",st.username),{resolvedNotice:false},{merge:true}).catch(()=>{});
+    }
+   }
   }catch(x:any){
-   if(isFlagged(x))setFlagged(true);
+   if(isFlagged(x)){setFlagged(true);setRestrictionCount((x as any).restrictionCount||1);}
    else setErr(fail(toast,x,"Unable to load profile"));
   }
   setLoadingProfile(false);
@@ -1894,6 +1919,11 @@ function Dashboard({user}:{user:User}){
  {accountOpen&&<AccountModal user={user} profile={profile} delFails={delFails} busy={deletingProfile} onDelete={deleteProfileOnly} onClose={()=>setAccountOpen(false)}/>}
  {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setOpenCard("profile"),showInbox:()=>setOpenCard("inbox"),showPortfolio:()=>setOpenCard("portfolio"),showPosts:()=>setOpenCard("posts")})} onClose={()=>setTourOpen(false)}/>}
 
+ {resolvedNotice&&<section className="spts-card spts-resolved-notice" role="status">
+  <div className="spts-card-head"><h2>Account reviewed</h2><button type="button" className="spts-ghost" onClick={()=>setResolvedNotice(false)} aria-label="Dismiss">Dismiss</button></div>
+  <p className="spts-muted">Your account was reviewed and the restrictions have been removed.</p>
+ </section>}
+
  <div className="spts-dash-actions">
   {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setOpenCard(c=>c==="profile"?null:"profile")}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
   <button type="button" aria-expanded={inboxOpen} onClick={()=>setOpenCard(c=>c==="inbox"?null:"inbox")}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
@@ -1905,7 +1935,7 @@ function Dashboard({user}:{user:User}){
 
  {flagged&&<section className="spts-card">
   <div className="spts-card-head"><h2>Account restricted</h2></div>
-  <AccountFlagNotice uid={user.uid}/>
+  <AccountFlagNotice uid={user.uid} restrictionCount={restrictionCount}/>
  </section>}
 
  {profileOpen&&!flagged&&<section className="spts-card">
@@ -2009,10 +2039,14 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
 
  useEffect(()=>{(async()=>{try{
   const s=await getDoc(doc(profileDb,"profiles",normalizeUsername(username)));
-  if(!s.exists()){setNotFound(true);return;}
-  setP(s.data());
-  prefetchAd(s.data().username||normalizeUsername(username),!!s.data().premium,!!s.data().premium&&downloadFlag(s.data())); // so "See portfolio" opens instantly
-  const q=query(collection(profileDb,"posts"),where("ownerId","==",s.data().uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
+  if(!s.exists())return void setNotFound(true);
+  const d=s.data();
+  // Repeat offender under an active restriction (restrictionCount>=2): treat exactly like no profile
+  // at all — visitors get nothing.
+  if(d.restricted&&Number(d.restrictionCount)>=2)return void setNotFound(true);
+  setP(d);
+  prefetchAd(d.username||normalizeUsername(username),!!d.premium,!!d.premium&&downloadFlag(d)); // so "See portfolio" opens instantly
+  const q=query(collection(profileDb,"posts"),where("ownerId","==",d.uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
   onSnapshot(q,x=>setPosts(x.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(accessText(e,ACCESS_GENERIC)));
  }catch(x:any){setErr(fail(toast,x,"Unable to load profile"));}})()},[username]);
 
@@ -2192,14 +2226,14 @@ async function beginUpgrade(user:User){
 
 // Every upgrade button in the app.
 function UpgradeButton({user,className}:{user:User;className?:string}){
- const [busy,setBusy]=useState(false),[flagged,setFlagged]=useState(false);
+ const [busy,setBusy]=useState(false),[flagged,setFlagged]=useState(false),[restrictionCount,setRestrictionCount]=useState(1);
  const toast=useToast();const hint=useHint();
  async function go(){
   setBusy(true);
   try{ await beginUpgrade(user); } // navigates away on success
   catch(x:any){
    setBusy(false);
-   if(isFlagged(x)){setFlagged(true);return;}
+   if(isFlagged(x)){setFlagged(true);setRestrictionCount((x as any).restrictionCount||1);return;}
    fail(toast,x,"Couldn't start the upgrade. Please try again.");
   }
  }
@@ -2208,7 +2242,7 @@ function UpgradeButton({user,className}:{user:User;className?:string}){
   {flagged&&<div className="spts-modal-backdrop" role="dialog" aria-modal="true" onClick={()=>setFlagged(false)}>
    <div className="spts-modal spts-modal-wide" onClick={e=>e.stopPropagation()}>
     <h3 className="spts-modal-title">Account restricted</h3>
-    <div className="spts-modal-body"><AccountFlagNotice uid={user.uid}/></div>
+    <div className="spts-modal-body"><AccountFlagNotice uid={user.uid} restrictionCount={restrictionCount}/></div>
     <div className="spts-modal-actions"><button type="button" className="spts-ghost" onClick={()=>setFlagged(false)}>Close</button></div>
    </div>
   </div>}
@@ -2223,6 +2257,7 @@ function UpgradeSuccess({user}:{user:User|null}){
  const [status,setStatus]=useState<"working"|"done"|"error">("working");
  // plain = our own message; retry = first Firebase access error; support = same access error repeated; flagged = UID not linked to a profile
  const [errKind,setErrKind]=useState<"plain"|"retry"|"support"|"flagged">("plain");
+ const [restrictionCount,setRestrictionCount]=useState(1);
  const [err,setErr]=useState("");
  const ran=useRef(false);
  const toast=useToast();
@@ -2256,7 +2291,7 @@ function UpgradeSuccess({user}:{user:User|null}){
    toast("success","You're upgraded to Premium.");
   }catch(x:any){
    setStatus("error");
-   if(isFlagged(x)){noteAccessError(null);setErrKind("flagged");return;}
+   if(isFlagged(x)){noteAccessError(null);setErrKind("flagged");setRestrictionCount((x as any).restrictionCount||1);return;}
    const code=firebaseAccessCode(x);
    if(code){setErrKind(noteAccessError(code)?"support":"retry");setErr(ACCESS_GENERIC);toast("error",ACCESS_GENERIC);return;}
    noteAccessError(null);
@@ -2273,7 +2308,7 @@ function UpgradeSuccess({user}:{user:User|null}){
   </>}
   {status==="error"&&errKind==="flagged"&&<>
    <h2>Account restricted</h2>
-   <AccountFlagNotice uid={user?.uid}/>
+   <AccountFlagNotice uid={user?.uid} restrictionCount={restrictionCount}/>
    <a className="spts-ghost spts-link-btn" href={DASHBOARD_PATH}>Back to dashboard</a>
   </>}
   {status==="error"&&errKind!=="flagged"&&<>

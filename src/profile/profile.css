@@ -339,6 +339,11 @@ video.spts-media-el{cursor:pointer;}
 .spts-flag-h{font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:#bcaeff;}
 .spts-flag-h.spts-flag-ok{color:var(--cyan);}
 
+/* Dashboard: one-time notice after a restriction is lifted (dismissible, cleared server-side on load). */
+.spts-resolved-notice{border-left:2px solid var(--cyan);}
+.spts-resolved-notice .spts-card-head h2{color:var(--white);}
+.spts-resolved-notice .spts-card-head button{min-height:0;padding:4px 10px;font-size:.68rem;}
+
 /* Inline "Terms of Service" trigger inside the flag notice: reads like a link, not a button. */
 .spts-page .spts-flag-notice .spts-legal-link,
 .spts-public .spts-flag-notice .spts-legal-link {
