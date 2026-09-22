@@ -1924,14 +1924,20 @@ function Dashboard({user}:{user:User}){
   <p className="spts-muted">Your account was reviewed and the restrictions have been removed.</p>
  </section>}
 
- <div className="spts-dash-actions">
+ {/* Overview is always the first thing shown, loading or not. The action buttons below it wait
+    for loadingProfile so they never flash in before the overview (and the restricted-account
+    check) is ready; once something is open, the overview hides again until it's closed. */}
+ {!flagged&&!profileOpen&&!inboxOpen&&!portfolioOpen&&!postsCardOpen&&<DashboardOverview user={user} profile={profile} loadingProfile={loadingProfile} posts={posts} premium={isPremium} downloadOn={downloadOn}
+  onOpenProfile={()=>setOpenCard("profile")} onEditProfile={()=>{setOpenCard("profile");setEditing(true);}} onOpenInbox={()=>setOpenCard("inbox")} onOpenPortfolio={()=>setOpenCard("portfolio")} onOpenPosts={()=>setOpenCard("posts")} onShare={()=>setShareOpen(true)} onToggleDownload={toggleDownload}/>}
+
+ {!loadingProfile&&<div className="spts-dash-actions">
   {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setOpenCard(c=>c==="profile"?null:"profile")}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
   <button type="button" aria-expanded={inboxOpen} onClick={()=>setOpenCard(c=>c==="inbox"?null:"inbox")}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
   {profile&&!flagged&&<button type="button" onClick={()=>setShareOpen(true)} {...hint.props("shareOwn")}>Share profile</button>}
   {profile&&!flagged&&<button type="button" onClick={()=>setQrOpen(true)} {...hint.props("qrOwn")}>QR code</button>}
   {profile&&!flagged&&<button type="button" aria-expanded={portfolioOpen} onClick={()=>setOpenCard(c=>c==="portfolio"?null:"portfolio")} {...hint.props("portfolioOwn")}>{portfolioOpen?"Hide portfolio":"Manage portfolio"}</button>}
   {profile&&!flagged&&<button type="button" aria-expanded={postsCardOpen} onClick={()=>setOpenCard(c=>c==="posts"?null:"posts")} {...hint.props("postsOwn")}>{postsCardOpen?"Hide posts":"Manage posts"}</button>}
- </div>
+ </div>}
 
  {flagged&&<section className="spts-card">
   <div className="spts-card-head"><h2>Account restricted</h2></div>
@@ -2006,12 +2012,6 @@ function Dashboard({user}:{user:User}){
    {profile&&<a className="spts-see-more" href={`/profile/${profile.username}`}>See all posts on your public profile <Ico d={ICON.next}/></a>}
   </>}
  </section>}
-
- {/* Nothing open: show what is new and what to do next. Held back until the restricted-account
-    check finishes, so a flagged account never gets a flash of the overview; hides again as
-    soon as a card is opened. */}
- {!loadingProfile&&!flagged&&!profileOpen&&!inboxOpen&&!portfolioOpen&&!postsCardOpen&&<DashboardOverview user={user} profile={profile} loadingProfile={loadingProfile} posts={posts} premium={isPremium} downloadOn={downloadOn}
-  onOpenProfile={()=>setOpenCard("profile")} onEditProfile={()=>{setOpenCard("profile");setEditing(true);}} onOpenInbox={()=>setOpenCard("inbox")} onOpenPortfolio={()=>setOpenCard("portfolio")} onOpenPosts={()=>setOpenCard("posts")} onShare={()=>setShareOpen(true)} onToggleDownload={toggleDownload}/>}
 
  {err&&<p className="spts-error"><ErrText text={err}/></p>}</main>
 }
