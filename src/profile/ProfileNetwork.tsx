@@ -50,7 +50,11 @@ function supportUrl(text:string){
  *    (ACCESS_ERR_LIMIT in a row, per browser session) they're pointed to Contact support.
  *    Use fail(toast,x,"Unable to …") in catch blocks and accessText(e,…) in passive listeners.
  *  - Restricted account: every time the dashboard opens, the signed-in UID is checked against
- *    its profile in Firestore (checkAccount). If it isn't found there, the flag notice shows.
+ *    its profile in Firestore (checkAccount). If it isn't found there, the flag notice shows,
+ *    telling the user they've been restricted for a Terms of Service violation (with a link
+ *    to reread it) and pointing them to Contact support for review — the only two suggestions
+ *    given. The dashboard overview is held back until this check finishes, so it never flashes
+ *    for a flagged account.
  * ------------------------------------------------------------------ */
 const ACCESS_GENERIC="Something went wrong, try again.";
 const ACCESS_PERSIST="Still not working. Contact support for help.";
@@ -129,11 +133,13 @@ async function requireLinkedProfile(user:User):Promise<string>{
 const FLAG_AFFECTED=["Editing or managing your profile","Posts, and messaging through public profile","Premium upgrade and some features"];
 const FLAG_STILL_OK=["Logging in and out","Viewing other people's public profiles","Sending messages and comments on other profiles","Your public profile and portfolio"];
 function AccountFlagNotice({uid,showSupport=true}:{uid?:string;showSupport?:boolean}){
+ const [legalOpen,setLegalOpen]=useState(false);
  return <div className="spts-flag-notice" role="alert">
-  <p>Your account is currently restricted, so some features may not work until it has been reviewed.</p>
+  <p>Your account has been restricted for violating our <button type="button" className="spts-legal-link" onClick={()=>setLegalOpen(true)}>Terms of Service</button>, and is pending review.</p>
   <div><span className="spts-flag-h">May not work</span><ul>{FLAG_AFFECTED.map(t=><li key={t}>{t}</li>)}</ul></div>
   <div><span className="spts-flag-h spts-flag-ok">Still available</span><ul>{FLAG_STILL_OK.map(t=><li key={t}>{t}</li>)}</ul></div>
-  <p>Your login and the services above are not affected.{showSupport&&<> If you think this is a mistake, <a className="spts-link" href={supportUrl(`Hi, my account is showing as restricted and I'd like it reviewed.${uid?` Account ID: ${uid}`:""}`)} target="_blank" rel="noreferrer">contact support</a> and we'll review it.</>}</p>
+  <p>Please re-read our <button type="button" className="spts-legal-link" onClick={()=>setLegalOpen(true)}>Terms of Service</button>{showSupport&&<>, then <a className="spts-link" href={supportUrl(`Hi, my account is showing as restricted and I'd like it reviewed.${uid?` Account ID: ${uid}`:""}`)} target="_blank" rel="noreferrer">contact support</a> for review</>}.</p>
+  {legalOpen&&<LegalModal kind="terms" onClose={()=>setLegalOpen(false)}/>}
  </div>;
 }
 
@@ -1715,7 +1721,9 @@ function Dashboard({user}:{user:User}){
  const [deletingProfile,setDeletingProfile]=useState(false);
  const [flagged,setFlagged]=useState(false); // signed-in UID not found in its profile: restricted account
  const [addingPost,setAddingPost]=useState(false);
- const [profileOpen,setProfileOpen]=useState(false),[inboxOpen,setInboxOpen]=useState(false),[tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false),[qrOpen,setQrOpen]=useState(false),[portfolioOpen,setPortfolioOpen]=useState(false),[postsCardOpen,setPostsCardOpen]=useState(false);
+ const [openCard,setOpenCard]=useState<null|"profile"|"inbox"|"portfolio"|"posts">(null); // only one dashboard card open at a time
+ const profileOpen=openCard==="profile",inboxOpen=openCard==="inbox",portfolioOpen=openCard==="portfolio",postsCardOpen=openCard==="posts";
+ const [tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false),[qrOpen,setQrOpen]=useState(false);
  const [delFails,setDelFails]=useState(()=>readDelFails(user.uid));
  const hint=useHint();const showHint=hint.show;
  const [dlBusy,setDlBusy]=useState(false);
@@ -1739,7 +1747,7 @@ function Dashboard({user}:{user:User}){
  const locked=!!profile; // after initial setup: bio + any still-empty optional fields are editable
  const fieldLocked=(v:any)=>locked&&!!String(v??"").trim(); // a field that already has a value is locked
  // Profile and inbox stay hidden until asked for — except a brand-new user, who needs the create form.
- useEffect(()=>{if(!loadingProfile&&!profile&&!flagged)setProfileOpen(true);},[loadingProfile,profile,flagged]);
+ useEffect(()=>{if(!loadingProfile&&!profile&&!flagged)setOpenCard("profile");},[loadingProfile,profile,flagged]);
 
  // Opening the portfolio card brings it into view (it sits below the profile and inbox cards).
  useEffect(()=>{ if(portfolioOpen)document.getElementById("spts-portfolio-card")?.scrollIntoView({behavior:"smooth",block:"start"}); },[portfolioOpen]);
@@ -1884,15 +1892,15 @@ function Dashboard({user}:{user:User}){
  {qrOpen&&profile&&<QrModal profile={profile} onClose={()=>setQrOpen(false)}/>}
  {shareOpen&&profile&&<ShareProfileModal profile={profile} onClose={()=>setShareOpen(false)}/>}
  {accountOpen&&<AccountModal user={user} profile={profile} delFails={delFails} busy={deletingProfile} onDelete={deleteProfileOnly} onClose={()=>setAccountOpen(false)}/>}
- {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setProfileOpen(true),showInbox:()=>setInboxOpen(true),showPortfolio:()=>setPortfolioOpen(true),showPosts:()=>setPostsCardOpen(true)})} onClose={()=>setTourOpen(false)}/>}
+ {tourOpen&&<Tour steps={dashboardTourSteps({profile,premium:isPremium,showProfile:()=>setOpenCard("profile"),showInbox:()=>setOpenCard("inbox"),showPortfolio:()=>setOpenCard("portfolio"),showPosts:()=>setOpenCard("posts")})} onClose={()=>setTourOpen(false)}/>}
 
  <div className="spts-dash-actions">
-  {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setProfileOpen(o=>!o)}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
-  <button type="button" aria-expanded={inboxOpen} onClick={()=>setInboxOpen(o=>!o)}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
+  {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setOpenCard(c=>c==="profile"?null:"profile")}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
+  <button type="button" aria-expanded={inboxOpen} onClick={()=>setOpenCard(c=>c==="inbox"?null:"inbox")}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
   {profile&&!flagged&&<button type="button" onClick={()=>setShareOpen(true)} {...hint.props("shareOwn")}>Share profile</button>}
   {profile&&!flagged&&<button type="button" onClick={()=>setQrOpen(true)} {...hint.props("qrOwn")}>QR code</button>}
-  {profile&&!flagged&&<button type="button" aria-expanded={portfolioOpen} onClick={()=>setPortfolioOpen(o=>!o)} {...hint.props("portfolioOwn")}>{portfolioOpen?"Hide portfolio":"Manage portfolio"}</button>}
-  {profile&&!flagged&&<button type="button" aria-expanded={postsCardOpen} onClick={()=>setPostsCardOpen(o=>!o)} {...hint.props("postsOwn")}>{postsCardOpen?"Hide posts":"Manage posts"}</button>}
+  {profile&&!flagged&&<button type="button" aria-expanded={portfolioOpen} onClick={()=>setOpenCard(c=>c==="portfolio"?null:"portfolio")} {...hint.props("portfolioOwn")}>{portfolioOpen?"Hide portfolio":"Manage portfolio"}</button>}
+  {profile&&!flagged&&<button type="button" aria-expanded={postsCardOpen} onClick={()=>setOpenCard(c=>c==="posts"?null:"posts")} {...hint.props("postsOwn")}>{postsCardOpen?"Hide posts":"Manage posts"}</button>}
  </div>
 
  {flagged&&<section className="spts-card">
@@ -1969,9 +1977,11 @@ function Dashboard({user}:{user:User}){
   </>}
  </section>}
 
- {/* Nothing open: show what is new and what to do next. It hides as soon as a card is opened. */}
- {!flagged&&!profileOpen&&!inboxOpen&&!portfolioOpen&&!postsCardOpen&&<DashboardOverview user={user} profile={profile} loadingProfile={loadingProfile} posts={posts} premium={isPremium} downloadOn={downloadOn}
-  onOpenProfile={()=>setProfileOpen(true)} onEditProfile={()=>{setProfileOpen(true);setEditing(true);}} onOpenInbox={()=>setInboxOpen(true)} onOpenPortfolio={()=>setPortfolioOpen(true)} onOpenPosts={()=>setPostsCardOpen(true)} onShare={()=>setShareOpen(true)} onToggleDownload={toggleDownload}/>}
+ {/* Nothing open: show what is new and what to do next. Held back until the restricted-account
+    check finishes, so a flagged account never gets a flash of the overview; hides again as
+    soon as a card is opened. */}
+ {!loadingProfile&&!flagged&&!profileOpen&&!inboxOpen&&!portfolioOpen&&!postsCardOpen&&<DashboardOverview user={user} profile={profile} loadingProfile={loadingProfile} posts={posts} premium={isPremium} downloadOn={downloadOn}
+  onOpenProfile={()=>setOpenCard("profile")} onEditProfile={()=>{setOpenCard("profile");setEditing(true);}} onOpenInbox={()=>setOpenCard("inbox")} onOpenPortfolio={()=>setOpenCard("portfolio")} onOpenPosts={()=>setOpenCard("posts")} onShare={()=>setShareOpen(true)} onToggleDownload={toggleDownload}/>}
 
  {err&&<p className="spts-error"><ErrText text={err}/></p>}</main>
 }

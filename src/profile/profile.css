@@ -339,6 +339,29 @@ video.spts-media-el{cursor:pointer;}
 .spts-flag-h{font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:#bcaeff;}
 .spts-flag-h.spts-flag-ok{color:var(--cyan);}
 
+/* Inline "Terms of Service" trigger inside the flag notice: reads like a link, not a button. */
+.spts-page .spts-flag-notice .spts-legal-link,
+.spts-public .spts-flag-notice .spts-legal-link {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--cyan);
+  font: inherit;
+  letter-spacing: normal;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.spts-page .spts-flag-notice .spts-legal-link:hover,
+.spts-public .spts-flag-notice .spts-legal-link:hover {
+  background: none;
+  box-shadow: none;
+  color: var(--white);
+}
+
 /* ==================================================================== *
  * Premium public-profile theme — additive skin on top of the base
  * theme, applied only when the profile owner is premium.
