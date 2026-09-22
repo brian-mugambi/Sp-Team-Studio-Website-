@@ -1766,6 +1766,7 @@ function Dashboard({user}:{user:User}){
  const [addingPost,setAddingPost]=useState(false);
  const [openCard,setOpenCard]=useState<null|"profile"|"inbox"|"portfolio"|"posts">(null); // only one dashboard card open at a time
  const profileOpen=openCard==="profile",inboxOpen=openCard==="inbox",portfolioOpen=openCard==="portfolio",postsCardOpen=openCard==="posts";
+ useEffect(()=>{ if(flagged)setOpenCard(null); },[flagged]); // becoming restricted mid-session closes whatever was open, no exceptions
  const [tourOpen,setTourOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[shareOpen,setShareOpen]=useState(false),[qrOpen,setQrOpen]=useState(false);
  const [delFails,setDelFails]=useState(()=>readDelFails(user.uid));
  const hint=useHint();const showHint=hint.show;
@@ -1963,13 +1964,14 @@ function Dashboard({user}:{user:User}){
  {!loadingProfile&&!flagged&&!profileOpen&&!inboxOpen&&!portfolioOpen&&!postsCardOpen&&<div className="spts-fade-in"><DashboardOverview user={user} profile={profile} loadingProfile={loadingProfile} posts={posts} premium={isPremium} downloadOn={downloadOn}
   onOpenProfile={()=>setOpenCard("profile")} onEditProfile={()=>{setOpenCard("profile");setEditing(true);}} onOpenInbox={()=>setOpenCard("inbox")} onOpenPortfolio={()=>setOpenCard("portfolio")} onOpenPosts={()=>setOpenCard("posts")} onShare={()=>setShareOpen(true)} onToggleDownload={toggleDownload}/></div>}
 
- {!loadingProfile&&<div className="spts-dash-actions spts-fade-in">
-  {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setOpenCard(c=>c==="profile"?null:"profile")}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
+ {/* No dashboard interactions at all while restricted, at either tier — only the notice below. */}
+ {!loadingProfile&&!flagged&&<div className="spts-dash-actions spts-fade-in">
+  <button type="button" aria-expanded={profileOpen} onClick={()=>setOpenCard(c=>c==="profile"?null:"profile")}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>
   <button type="button" aria-expanded={inboxOpen} onClick={()=>setOpenCard(c=>c==="inbox"?null:"inbox")}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
-  {profile&&!flagged&&<button type="button" onClick={()=>setShareOpen(true)} {...hint.props("shareOwn")}>Share profile</button>}
-  {profile&&!flagged&&<button type="button" onClick={()=>setQrOpen(true)} {...hint.props("qrOwn")}>QR code</button>}
-  {profile&&!flagged&&<button type="button" aria-expanded={portfolioOpen} onClick={()=>setOpenCard(c=>c==="portfolio"?null:"portfolio")} {...hint.props("portfolioOwn")}>{portfolioOpen?"Hide portfolio":"Manage portfolio"}</button>}
-  {profile&&!flagged&&<button type="button" aria-expanded={postsCardOpen} onClick={()=>setOpenCard(c=>c==="posts"?null:"posts")} {...hint.props("postsOwn")}>{postsCardOpen?"Hide posts":"Manage posts"}</button>}
+  {profile&&<button type="button" onClick={()=>setShareOpen(true)} {...hint.props("shareOwn")}>Share profile</button>}
+  {profile&&<button type="button" onClick={()=>setQrOpen(true)} {...hint.props("qrOwn")}>QR code</button>}
+  {profile&&<button type="button" aria-expanded={portfolioOpen} onClick={()=>setOpenCard(c=>c==="portfolio"?null:"portfolio")} {...hint.props("portfolioOwn")}>{portfolioOpen?"Hide portfolio":"Manage portfolio"}</button>}
+  {profile&&<button type="button" aria-expanded={postsCardOpen} onClick={()=>setOpenCard(c=>c==="posts"?null:"posts")} {...hint.props("postsOwn")}>{postsCardOpen?"Hide posts":"Manage posts"}</button>}
  </div>}
 
  {flagged&&<section className="spts-card spts-fade-in">
@@ -2022,7 +2024,7 @@ function Dashboard({user}:{user:User}){
   </form>}
  </section>}
 
- {inboxOpen&&<Messages user={user}/>}
+ {inboxOpen&&!flagged&&<Messages user={user}/>}
 
  {profile&&!flagged&&portfolioOpen&&<PortfolioCard user={user} profile={profile}/>}
 
