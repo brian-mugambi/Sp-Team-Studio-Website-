@@ -93,6 +93,19 @@
  * ------------------------------------------------------------------ */
 .spts-spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;margin-right:6px;vertical-align:-2px;animation:spts-spin .7s linear infinite;}
 @keyframes spts-spin{to{transform:rotate(360deg);}}
+
+/* Dashboard: skeleton placeholder while the realtime account check settles, and a soft fade-in
+   for whatever replaces it (overview, action buttons, restricted card) once it's ready. */
+@keyframes spts-shimmer{0%{background-position:-120% 0;}100%{background-position:120% 0;}}
+.spts-skeleton-line{height:14px;border-radius:6px;margin:10px 0;background:linear-gradient(90deg,var(--faintest) 25%,rgba(255,255,255,0.12) 50%,var(--faintest) 75%);background-size:200% 100%;animation:spts-shimmer 1.4s ease-in-out infinite;}
+.spts-skeleton-title{height:18px;width:40%;margin-top:0;}
+.spts-skeleton-short{width:60%;}
+.spts-skeleton-center{margin-left:auto;margin-right:auto;}
+.spts-skeleton-avatar{width:132px;height:132px;border-radius:50%;margin-bottom:18px;background:linear-gradient(90deg,var(--faintest) 25%,rgba(255,255,255,0.12) 50%,var(--faintest) 75%);background-size:200% 100%;animation:spts-shimmer 1.4s ease-in-out infinite;}
+.spts-skeleton-pill{width:110px;height:38px;border-radius:999px;background:linear-gradient(90deg,var(--faintest) 25%,rgba(255,255,255,0.12) 50%,var(--faintest) 75%);background-size:200% 100%;animation:spts-shimmer 1.4s ease-in-out infinite;}
+@media (max-width:640px){.spts-skeleton-avatar{width:104px;height:104px;}}
+@keyframes spts-fade-in{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+.spts-fade-in{animation:spts-fade-in .35s ease-out both;}
 .spts-spinner-lg{width:28px;height:28px;border-width:3px;color:var(--cyan);margin:0 0 14px;}
 
 /* ------------------------------------------------------------------ *

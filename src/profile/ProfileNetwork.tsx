@@ -116,24 +116,50 @@ type Standing={state:"new"}|{state:"ok";username:string;profile:any};
 /* users/{uid} -> username -> profiles/{username}, whose uid must equal the signed-in uid.
  * No users/{uid} at all = a new sign-up that hasn't created a profile yet (normal, not flagged).
  *
- * Restriction history lives on profiles/{username} itself, set by hand in the Firestore console
- * (same manual pattern as flagging — changing/removing the doc's uid — and as ad-request
- * fulfilment) alongside whatever breaks the uid link:
- *   restricted: true while a restriction is currently active; set back to false on review.
- *   restrictionCount: how many times ever restricted (increment by 1 each new restriction; never
- *     decrement — it's a permanent history, and 2+ means "repeat offender" from then on).
- *   resolvedNotice: set true when a restriction is lifted, so the owner's next dashboard visit
- *     shows a one-time "reviewed, restrictions removed" notice; the client clears it after showing it.
- * A repeat offender (restricted && restrictionCount>=2) also loses their public profile —
- * PublicProfile below refuses to show it, exactly as if it didn't exist.
+ * Restricting an account is still a manual, by-hand action in the Firestore console — breaking
+ * the uid link on profiles/{username} (or deleting the doc outright, or setting `locked:true` on
+ * it, for a repeat offender whose public profile should disappear too — see PublicProfile below).
+ * Everything past that single action is automatic, client-side and realtime, on users/{uid}:
+ *   restricted: mirrors whether the account is currently restricted.
+ *   restrictionCount: a permanent count of how many times it ever has been (2+ = repeat offender);
+ *     the client bumps this itself the instant it detects a fresh restriction — no console step.
+ *   resolvedNotice: the client sets this true the instant it detects a restriction being lifted,
+ *     so the owner's dashboard shows a one-time "reviewed, restrictions removed" notice next time
+ *     it's open, then clears the flag itself once shown.
+ * watchAccountStanding (used by the dashboard) keeps all of this live via onSnapshot, so a
+ * restriction or its resolution shows up immediately, no reload needed. checkAccount below stays
+ * a plain one-shot read for the upgrade flow, which only ever needs a point-in-time check.
  */
 async function checkAccount(user:User):Promise<Standing>{
  const us=await getDoc(doc(profileDb,"users",user.uid));
  if(!us.exists())return {state:"new"};
- const uname:string=us.data().username;
+ const ud=us.data();const uname:string=ud.username;
  const pf=uname?await getDoc(doc(profileDb,"profiles",uname)):null;
- if(!pf||!pf.exists()||pf.data().uid!==user.uid)throw flaggedError(pf?.exists()?Number(pf.data().restrictionCount)||1:1);
+ if(!pf||!pf.exists()||pf.data().uid!==user.uid||pf.data().locked)throw flaggedError(Number(ud.restrictionCount)||1);
  return {state:"ok",username:uname,profile:pf.data()};
+}
+/* Realtime version of the same standing check, self-healing the users/{uid} restriction
+ * bookkeeping as it goes. Calls onChange with the current standing every time either doc updates;
+ * returns an unsubscribe function. */
+function watchAccountStanding(user:User,onChange:(st:Standing|{state:"flagged";restrictionCount:number}|{state:"loading"})=>void){
+ let profileUnsub:(()=>void)|null=null;
+ const usersRef=doc(profileDb,"users",user.uid);
+ const usersUnsub=onSnapshot(usersRef,us=>{
+  profileUnsub?.();profileUnsub=null;
+  if(!us.exists()){onChange({state:"new"});return;}
+  const ud=us.data();const uname:string=ud.username;
+  if(!uname){onChange({state:"new"});return;}
+  profileUnsub=onSnapshot(doc(profileDb,"profiles",uname),pf=>{
+   const flaggedNow=!pf.exists()||pf.data()!.uid!==user.uid||!!pf.data()!.locked;
+   if(flaggedNow&&!ud.restricted) // fresh restriction: record it, automatically, right now
+    setDoc(usersRef,{restricted:true,restrictionCount:increment(1),restrictedAt:serverTimestamp()},{merge:true}).catch(()=>{});
+   else if(!flaggedNow&&ud.restricted) // just resolved: record it and queue the one-time notice
+    setDoc(usersRef,{restricted:false,resolvedNotice:true,resolvedAt:serverTimestamp()},{merge:true}).catch(()=>{});
+   if(flaggedNow)onChange({state:"flagged",restrictionCount:Number(ud.restrictionCount)||1});
+   else onChange({state:"ok",username:uname,profile:{...pf.data()!,resolvedNotice:!!ud.resolvedNotice}});
+  },()=>onChange({state:"new"}));
+ },()=>onChange({state:"new"}));
+ return ()=>{usersUnsub();profileUnsub?.();};
 }
 async function requireLinkedProfile(user:User):Promise<string>{
  const st=await checkAccount(user);
@@ -1779,27 +1805,27 @@ function Dashboard({user}:{user:User}){
   setTourOpen(true);
  },[loadingProfile]);
 
- useEffect(()=>{(async()=>{
-  try{
-   // Runs every time the dashboard opens: the signed-in UID must be found in its profile.
-   const st=await checkAccount(user);
+ useEffect(()=>{
+  const unwatch=watchAccountStanding(user,st=>{
    if(st.state==="ok"){
     const d=st.profile;
     setProfile(d);setU(d.username);setName(d.displayName);setBio(d.bio);setPhoto(d.photoUrl);setWeb(d.websiteUrl);setEmail(d.email);setPhone(d.phone);setEditing(false);
-    // A restriction was just lifted (set by hand in Firestore on review): show the one-time notice, then clear the flag.
+    setFlagged(false);
+    // A restriction was just lifted: show the one-time notice, then clear the flag ourselves — no console step.
     if(d.resolvedNotice){
      setResolvedNotice(true);
-     setDoc(doc(profileDb,"profiles",st.username),{resolvedNotice:false},{merge:true}).catch(()=>{});
+     setDoc(doc(profileDb,"users",user.uid),{resolvedNotice:false},{merge:true}).catch(()=>{});
     }
+   }else if(st.state==="flagged"){
+    setFlagged(true);setRestrictionCount(st.restrictionCount);
+   }else{
+    setProfile(null);setFlagged(false);
    }
-  }catch(x:any){
-   if(isFlagged(x)){setFlagged(true);setRestrictionCount((x as any).restrictionCount||1);}
-   else setErr(fail(toast,x,"Unable to load profile"));
-  }
-  setLoadingProfile(false);
- })();
- const q=query(collection(profileDb,"posts"),where("ownerId","==",user.uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
- return onSnapshot(q,s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(accessText(e,ACCESS_GENERIC)));
+   setLoadingProfile(false);
+  });
+  const q=query(collection(profileDb,"posts"),where("ownerId","==",user.uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
+  const unposts=onSnapshot(q,s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()} as any))),e=>setErr(accessText(e,ACCESS_GENERIC)));
+  return ()=>{unwatch();unposts();};
  },[user.uid]);
 
  async function save(e:React.FormEvent){
@@ -1924,13 +1950,20 @@ function Dashboard({user}:{user:User}){
   <p className="spts-muted">Your account was reviewed and the restrictions have been removed.</p>
  </section>}
 
- {/* Overview is always the first thing shown, loading or not. The action buttons below it wait
-    for loadingProfile so they never flash in before the overview (and the restricted-account
-    check) is ready; once something is open, the overview hides again until it's closed. */}
- {!flagged&&!profileOpen&&!inboxOpen&&!portfolioOpen&&!postsCardOpen&&<DashboardOverview user={user} profile={profile} loadingProfile={loadingProfile} posts={posts} premium={isPremium} downloadOn={downloadOn}
-  onOpenProfile={()=>setOpenCard("profile")} onEditProfile={()=>{setOpenCard("profile");setEditing(true);}} onOpenInbox={()=>setOpenCard("inbox")} onOpenPortfolio={()=>setOpenCard("portfolio")} onOpenPosts={()=>setOpenCard("posts")} onShare={()=>setShareOpen(true)} onToggleDownload={toggleDownload}/>}
+ {/* Overview is always the first thing shown. While the realtime account check is still settling,
+    a skeleton fills its spot (so the page never goes blank and mysterious) and fades out into the
+    real overview the instant it's ready; the action buttons wait for the same signal so they
+    never flash in early either. Once something is open, the overview hides again until it's closed. */}
+ {loadingProfile&&<section className="spts-card spts-overview spts-skeleton" aria-hidden="true">
+  <div className="spts-skeleton-line spts-skeleton-title"/>
+  <div className="spts-skeleton-line"/>
+  <div className="spts-skeleton-line"/>
+  <div className="spts-skeleton-line spts-skeleton-short"/>
+ </section>}
+ {!loadingProfile&&!flagged&&!profileOpen&&!inboxOpen&&!portfolioOpen&&!postsCardOpen&&<div className="spts-fade-in"><DashboardOverview user={user} profile={profile} loadingProfile={loadingProfile} posts={posts} premium={isPremium} downloadOn={downloadOn}
+  onOpenProfile={()=>setOpenCard("profile")} onEditProfile={()=>{setOpenCard("profile");setEditing(true);}} onOpenInbox={()=>setOpenCard("inbox")} onOpenPortfolio={()=>setOpenCard("portfolio")} onOpenPosts={()=>setOpenCard("posts")} onShare={()=>setShareOpen(true)} onToggleDownload={toggleDownload}/></div>}
 
- {!loadingProfile&&<div className="spts-dash-actions">
+ {!loadingProfile&&<div className="spts-dash-actions spts-fade-in">
   {!flagged&&<button type="button" aria-expanded={profileOpen} onClick={()=>setOpenCard(c=>c==="profile"?null:"profile")}>{profileOpen?"Hide profile":profile||loadingProfile?"Manage profile":"Create profile"}</button>}
   <button type="button" aria-expanded={inboxOpen} onClick={()=>setOpenCard(c=>c==="inbox"?null:"inbox")}>{inboxOpen?"Hide inbox":"Go to inbox"}</button>
   {profile&&!flagged&&<button type="button" onClick={()=>setShareOpen(true)} {...hint.props("shareOwn")}>Share profile</button>}
@@ -1939,7 +1972,7 @@ function Dashboard({user}:{user:User}){
   {profile&&!flagged&&<button type="button" aria-expanded={postsCardOpen} onClick={()=>setOpenCard(c=>c==="posts"?null:"posts")} {...hint.props("postsOwn")}>{postsCardOpen?"Hide posts":"Manage posts"}</button>}
  </div>}
 
- {flagged&&<section className="spts-card">
+ {flagged&&<section className="spts-card spts-fade-in">
   <div className="spts-card-head"><h2>Account restricted</h2></div>
   <AccountFlagNotice uid={user.uid} restrictionCount={restrictionCount}/>
  </section>}
@@ -2041,9 +2074,9 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   const s=await getDoc(doc(profileDb,"profiles",normalizeUsername(username)));
   if(!s.exists())return void setNotFound(true);
   const d=s.data();
-  // Repeat offender under an active restriction (restrictionCount>=2): treat exactly like no profile
-  // at all — visitors get nothing.
-  if(d.restricted&&Number(d.restrictionCount)>=2)return void setNotFound(true);
+  // Repeat offenders can be fully hidden without losing their data: set `locked:true` on this doc
+  // by hand in Firestore and visitors get treated exactly as if the profile didn't exist.
+  if(d.locked)return void setNotFound(true);
   setP(d);
   prefetchAd(d.username||normalizeUsername(username),!!d.premium,!!d.premium&&downloadFlag(d)); // so "See portfolio" opens instantly
   const q=query(collection(profileDb,"posts"),where("ownerId","==",d.uid),orderBy("createdAt","desc"),limit(MAX_POSTS));
@@ -2084,7 +2117,19 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
   finally{setPendingDeleteId(null);}
  }
  if(notFound)return <main className="spts-public"><div className="spts-public-status"><h1>Profile not found</h1><p className="spts-muted">This username doesn't have a public profile.</p><a className="spts-ghost spts-link-btn" href="/profiles">Get your own profile</a></div></main>;
- if(!p)return <main className="spts-public"><div className="spts-public-status"><span className="spts-spinner spts-spinner-lg" aria-hidden="true"/><p className="spts-muted">Loading profile…</p></div></main>;
+ if(!p)return <main className="spts-public"><div className="spts-profile-layout">
+  <section className="spts-profile-hero spts-skeleton" role="status" aria-label="Loading profile">
+   <div className="spts-skeleton-avatar"/>
+   <div className="spts-skeleton-line spts-skeleton-title spts-skeleton-center"/>
+   <div className="spts-skeleton-line spts-skeleton-short spts-skeleton-center"/>
+   <div className="spts-skeleton-line spts-skeleton-center" style={{marginTop:16,width:"70%"}}/>
+   <div className="spts-skeleton-line spts-skeleton-center" style={{width:"55%"}}/>
+   <div className="spts-profile-hero-actions">
+    <div className="spts-skeleton-pill"/>
+    <div className="spts-skeleton-pill"/>
+   </div>
+  </section>
+ </div></main>;
  const contacts=detectContacts(p.bio||"");
  const canDeletePosts=!!user&&user.uid===p.uid;
  const isOwner=canDeletePosts; // the signed-in owner viewing their own public page
@@ -2098,7 +2143,7 @@ function PublicProfile({username,user}:{username:string;user:User|null}){
  // Layout: the profile is one column; Posts / Message open as a second panel.
  // Desktop: profile on the left, panel on the right. Mobile: the profile fills the screen and the panel opens full screen.
  return <main className={`spts-public${p.premium?" spts-premium":""}`}>
- <div className={`spts-profile-layout${postsOpen||msgOpen?" spts-has-panel":""}`}>
+ <div className={`spts-profile-layout spts-fade-in${postsOpen||msgOpen?" spts-has-panel":""}`}>
 
  <section className="spts-profile-hero">
   {/* Owner: back to the dashboard tour. Everyone else: a short guide to this profile. */}
